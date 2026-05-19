@@ -1,0 +1,15 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-paper text-ink antialiased;
+}
+
+.container-narrow {
+  @apply mx-auto max-w-5xl px-6;
+}
