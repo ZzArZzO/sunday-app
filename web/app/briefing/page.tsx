@@ -9,12 +9,18 @@ export default async function BriefingPage() {
     briefing = await fetchBriefing();
   } catch (err) {
     return (
-      <div className="rounded-md border border-negative/30 bg-negative/5 p-6 text-sm text-negative">
-        <p className="font-medium">Couldn&apos;t load briefing.</p>
-        <p className="mt-2">{err instanceof Error ? err.message : String(err)}</p>
+      <div className="card border-negative/30 bg-negative-subtle/40 p-5">
+        <p className="font-medium text-negative">Couldn&apos;t load briefing</p>
+        <p className="mt-2 text-sm text-ink">
+          {err instanceof Error ? err.message : String(err)}
+        </p>
       </div>
     );
   }
 
-  return <BriefingView briefing={briefing} />;
+  return (
+    <div className="container-prose -mx-6 sm:mx-0">
+      <BriefingView briefing={briefing} />
+    </div>
+  );
 }
