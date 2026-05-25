@@ -6,31 +6,33 @@ const links = [
   { href: "/", label: "Home" },
   { href: "/upload", label: "Import" },
   { href: "/dashboard", label: "Dashboard" },
+  { href: "/fire", label: "FIRE" },
   { href: "/briefing", label: "Briefing" },
 ];
 
 /**
  * Sticky modern navbar with subtle blur and bordered base. Wordmark on left,
- * link group + theme toggle on right.
+ * link group + theme toggle on right. On narrow screens the link group becomes
+ * a horizontally-scrollable rail to keep all destinations one-tap reachable.
  */
 export function NavBar() {
   return (
     <header className="sticky top-0 z-40 border-b border-rule bg-bg/80 backdrop-blur-md">
-      <div className="container-narrow flex h-14 items-center justify-between">
-        <Link href="/" className="group inline-flex items-center gap-2">
+      <div className="container-narrow flex h-14 items-center justify-between gap-2">
+        <Link href="/" className="group inline-flex flex-none items-center gap-2">
           <Logo />
           <span className="font-sans text-base font-semibold tracking-tight text-ink group-hover:text-accent">
             Sunday
           </span>
         </Link>
-        <div className="flex items-center gap-1 sm:gap-2">
-          <nav>
-            <ul className="flex items-center gap-1">
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:gap-2">
+          <nav className="min-w-0 flex-1 sm:flex-none">
+            <ul className="flex items-center gap-1 overflow-x-auto scrollbar-none">
               {links.map((link) => (
-                <li key={link.href}>
+                <li key={link.href} className="flex-none">
                   <Link
                     href={link.href}
-                    className="rounded-md px-3 py-1.5 text-sm font-medium text-ink-muted transition-colors duration-200 ease-out hover:bg-surface-2 hover:text-ink"
+                    className="rounded-md px-2.5 py-1.5 text-sm font-medium text-ink-muted transition-colors duration-200 ease-out hover:bg-surface-2 hover:text-ink sm:px-3"
                   >
                     {link.label}
                   </Link>
@@ -38,7 +40,7 @@ export function NavBar() {
               ))}
             </ul>
           </nav>
-          <div className="ml-2 border-l border-rule pl-2">
+          <div className="ml-1 flex-none border-l border-rule pl-1 sm:ml-2 sm:pl-2">
             <ThemeToggle />
           </div>
         </div>

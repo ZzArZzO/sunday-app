@@ -1,7 +1,11 @@
 import type {
   BriefingResponse,
+  DividendResponse,
+  FireResponse,
   IngestResult,
   PortfolioResponse,
+  RebalanceResponse,
+  TaxSummaryResponse,
 } from "@/lib/types";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -28,6 +32,22 @@ export async function fetchPortfolio(): Promise<PortfolioResponse> {
 
 export async function fetchBriefing(): Promise<BriefingResponse> {
   return http<BriefingResponse>("/api/briefing");
+}
+
+export async function fetchFire(): Promise<FireResponse> {
+  return http<FireResponse>("/api/fire");
+}
+
+export async function fetchDividend(): Promise<DividendResponse> {
+  return http<DividendResponse>("/api/dividend");
+}
+
+export async function fetchTax(): Promise<TaxSummaryResponse> {
+  return http<TaxSummaryResponse>("/api/tax");
+}
+
+export async function fetchRebalance(): Promise<RebalanceResponse> {
+  return http<RebalanceResponse>("/api/rebalance");
 }
 
 export async function uploadCsv(file: File): Promise<IngestResult> {

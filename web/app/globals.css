@@ -92,11 +92,20 @@
 
 @layer components {
   .container-narrow {
-    @apply mx-auto max-w-5xl px-6;
+    @apply mx-auto max-w-5xl px-4 sm:px-6;
   }
 
   .container-prose {
-    @apply mx-auto max-w-column px-6;
+    @apply mx-auto max-w-column px-4 sm:px-6;
+  }
+
+  /* Hide scrollbar on horizontally-scrollable rails (e.g. the mobile nav). */
+  .scrollbar-none {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 
   /* Micro-cap label — used for section eyebrows and metadata. */

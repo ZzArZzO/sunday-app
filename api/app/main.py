@@ -2,7 +2,16 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routes import briefing, health, ingest, portfolio
+from app.routes import (
+    briefing,
+    dividend,
+    fire,
+    health,
+    ingest,
+    portfolio,
+    rebalance,
+    tax,
+)
 
 settings = get_settings()
 
@@ -27,3 +36,7 @@ app.include_router(health.router)
 app.include_router(ingest.router)
 app.include_router(portfolio.router)
 app.include_router(briefing.router)
+app.include_router(fire.router)
+app.include_router(dividend.router)
+app.include_router(tax.router)
+app.include_router(rebalance.router)

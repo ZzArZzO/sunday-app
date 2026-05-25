@@ -1,6 +1,7 @@
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -14,6 +15,23 @@ class User(Base):
     country: Mapped[str] = mapped_column(String(2), default="DE")
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Berlin")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    # FIRE planning inputs. Nullable so the UI can prompt for them.
+    annual_expenses_eur: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    annual_savings_eur: Mapped[Decimal | None] = mapped_column(Numeric(18, 2), nullable=True)
+    expected_real_return_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("5.00")
+    )
+    safe_withdrawal_rate_pct: Mapped[Decimal] = mapped_column(
+        Numeric(5, 2), default=Decimal("4.00")
+    )
+
+    # Target allocation for rebalancing. Stored as JSON-ish via individual columns
+    # to keep the schema flat. Sum should be 100 when set.
+    target_etf_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("60.00"))
+    target_stock_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("20.00"))
+    target_crypto_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("15.00"))
+    target_cash_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("5.00"))
 
     portfolios: Mapped[list["Portfolio"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"

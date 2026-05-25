@@ -1,13 +1,17 @@
-"""TR-style CSV ingestor.
+"""CSV ingestor with auto-detected broker format.
 
-Expected columns (subset of a Trade Republic export, normalised):
-    date, type, ticker, isin, asset_class, quantity, unit_price_eur, fees_eur
+Supported formats:
 
-`type` is "buy" or "sell". For the MVP slice only buy rows are honoured; sell
-handling (FIFO lot consumption) is Phase 2.
+  1. Sunday's normalised columns (legacy):
+        date, type, ticker, isin, asset_class, quantity, unit_price_eur, fees_eur
 
-The ingestor strips columns we don't want to persist (PII columns like
-broker_account_id, iban, name, etc.) by simply not reading them.
+  2. Trade Republic export (auto-detected):
+        Date, Type, Asset, ISIN, Shares, Price per share, Total, Fee, Tax, ...
+        — German variants ("Datum", "Typ", "Stück", "Preis pro Anteil") also recognised.
+
+The ingestor strips PII columns (broker_account_id, iban, name, etc.) by simply
+not reading them. Asset class is inferred from ISIN prefix + symbol when not
+explicitly provided (TR exports don't include it).
 """
 
 from __future__ import annotations
@@ -23,8 +27,32 @@ from sqlalchemy.orm import Session
 from app.models import Lot, Portfolio, Position
 from app.schemas import IngestResult
 
-ACCEPTED_TYPES = {"buy"}
+ACCEPTED_TYPES = {"buy", "kauf", "purchase"}
 ALLOWED_ASSET_CLASSES = {"stock", "etf", "crypto", "cash"}
+
+# Header aliases. Lowercased + stripped before matching.
+HEADER_ALIASES: dict[str, set[str]] = {
+    "date": {"date", "datum", "executed at", "transaction date", "trade date"},
+    "type": {"type", "typ", "transaction type", "action"},
+    "ticker": {"ticker", "symbol", "asset", "instrument", "name"},
+    "isin": {"isin", "instrument id"},
+    "asset_class": {"asset_class", "asset class", "class", "category"},
+    "quantity": {"quantity", "shares", "stück", "qty", "units", "amount"},
+    "unit_price_eur": {
+        "unit_price_eur",
+        "price per share",
+        "preis pro anteil",
+        "share price",
+        "unit price",
+        "price",
+    },
+    "fees_eur": {"fees_eur", "fee", "fees", "gebühr", "commission"},
+}
+
+
+# Heuristics to classify when the CSV doesn't tell us.
+CRYPTO_SYMBOLS = {"BTC", "ETH", "SOL", "ADA", "DOT", "AVAX", "MATIC", "XRP", "DOGE", "LINK"}
+ETF_ISIN_PREFIXES = ("IE", "LU")  # Most UCITS ETFs are Irish or Luxembourg domiciled
 
 
 @dataclass
@@ -46,50 +74,153 @@ class IngestionContext:
     positions_created: int = 0
     positions_updated: int = 0
     lots_created: int = 0
+    detected_format: str = "unknown"
+
+
+def _normalise_header(raw: str) -> str:
+    return raw.strip().lower().replace("﻿", "")
+
+
+def _alias_to_canonical(header: str) -> str | None:
+    h = _normalise_header(header)
+    for canonical, aliases in HEADER_ALIASES.items():
+        if h in aliases:
+            return canonical
+    return None
+
+
+def _build_column_map(fieldnames: list[str]) -> dict[str, str]:
+    """Map raw CSV headers → canonical column names we understand."""
+    mapping: dict[str, str] = {}
+    for raw in fieldnames:
+        canonical = _alias_to_canonical(raw)
+        if canonical is not None and canonical not in mapping.values():
+            mapping[raw] = canonical
+    return mapping
+
+
+def _detect_format(fieldnames: list[str]) -> str:
+    normalised = {_normalise_header(h) for h in fieldnames}
+    if {"date", "type", "ticker", "asset_class"}.issubset(normalised):
+        return "sunday_native"
+    if {"isin"}.issubset(normalised) and (
+        "shares" in normalised or "stück" in normalised
+    ):
+        return "trade_republic"
+    return "generic"
 
 
 def _safe_decimal(raw: str, *, field_name: str, ctx: IngestionContext) -> Decimal | None:
+    if raw is None:
+        return None
+    cleaned = raw.strip().replace("€", "").replace(" ", "").replace("\xa0", "")
+    if not cleaned:
+        return None
+    # Handle European decimals: 1.234,56 → 1234.56
+    if "," in cleaned and "." in cleaned:
+        cleaned = cleaned.replace(".", "").replace(",", ".")
+    elif "," in cleaned:
+        cleaned = cleaned.replace(",", ".")
     try:
-        return Decimal(raw.replace(",", ".").strip())
+        return Decimal(cleaned)
     except (InvalidOperation, AttributeError):
         ctx.warnings.append(f"could not parse {field_name}={raw!r}; skipping row")
         return None
 
 
-def _parse_row(row: dict[str, str], ctx: IngestionContext) -> ParsedRow | None:
-    required = ("date", "type", "ticker", "asset_class", "quantity", "unit_price_eur")
-    for key in required:
-        if not row.get(key):
-            ctx.warnings.append(f"missing column {key!r}; skipping row")
+def _parse_date(raw: str) -> datetime | None:
+    raw = raw.strip()
+    formats = (
+        "%Y-%m-%d",
+        "%Y-%m-%dT%H:%M:%S",
+        "%Y-%m-%d %H:%M:%S",
+        "%d.%m.%Y",
+        "%d/%m/%Y",
+        "%m/%d/%Y",
+    )
+    for fmt in formats:
+        try:
+            return datetime.strptime(raw, fmt)
+        except ValueError:
+            continue
+    try:
+        return datetime.fromisoformat(raw)
+    except ValueError:
+        return None
+
+
+def _infer_asset_class(ticker: str, isin: str | None) -> str:
+    if ticker.upper() in CRYPTO_SYMBOLS:
+        return "crypto"
+    if isin and isin[:2] in ETF_ISIN_PREFIXES:
+        return "etf"
+    return "stock"
+
+
+def _row_get(row: dict[str, str], column_map: dict[str, str], canonical: str) -> str | None:
+    for raw, mapped in column_map.items():
+        if mapped == canonical:
+            return row.get(raw)
+    return None
+
+
+def _parse_row(
+    row: dict[str, str], column_map: dict[str, str], ctx: IngestionContext
+) -> ParsedRow | None:
+    date_raw = _row_get(row, column_map, "date")
+    type_raw = _row_get(row, column_map, "type")
+    ticker_raw = _row_get(row, column_map, "ticker")
+    qty_raw = _row_get(row, column_map, "quantity")
+    price_raw = _row_get(row, column_map, "unit_price_eur")
+
+    for label, value in (
+        ("date", date_raw),
+        ("type", type_raw),
+        ("ticker", ticker_raw),
+        ("quantity", qty_raw),
+        ("unit_price_eur", price_raw),
+    ):
+        if not value:
+            ctx.warnings.append(f"missing column {label!r}; skipping row")
             return None
 
-    type_ = row["type"].strip().lower()
+    type_ = type_raw.strip().lower()
     if type_ not in ACCEPTED_TYPES:
         ctx.warnings.append(f"row type {type_!r} not supported in MVP; skipping")
         return None
+    type_ = "buy"
 
-    asset_class = row["asset_class"].strip().lower()
-    if asset_class not in ALLOWED_ASSET_CLASSES:
-        ctx.warnings.append(f"unknown asset_class {asset_class!r}; skipping")
+    date = _parse_date(date_raw)
+    if date is None:
+        ctx.warnings.append(f"unparseable date {date_raw!r}; skipping")
         return None
 
-    try:
-        date = datetime.fromisoformat(row["date"].strip())
-    except ValueError:
-        ctx.warnings.append(f"unparseable date {row['date']!r}; skipping")
-        return None
-
-    qty = _safe_decimal(row["quantity"], field_name="quantity", ctx=ctx)
-    price = _safe_decimal(row["unit_price_eur"], field_name="unit_price_eur", ctx=ctx)
-    fees = _safe_decimal(row.get("fees_eur") or "0", field_name="fees_eur", ctx=ctx) or Decimal("0")
+    qty = _safe_decimal(qty_raw, field_name="quantity", ctx=ctx)
+    price = _safe_decimal(price_raw, field_name="unit_price_eur", ctx=ctx)
+    fees_raw = _row_get(row, column_map, "fees_eur") or "0"
+    fees = _safe_decimal(fees_raw, field_name="fees_eur", ctx=ctx) or Decimal("0")
     if qty is None or price is None:
         return None
+
+    isin = _row_get(row, column_map, "isin")
+    isin = isin.strip() if isin else None
+    if isin == "":
+        isin = None
+
+    asset_class_raw = _row_get(row, column_map, "asset_class")
+    if asset_class_raw:
+        asset_class = asset_class_raw.strip().lower()
+        if asset_class not in ALLOWED_ASSET_CLASSES:
+            ctx.warnings.append(f"unknown asset_class {asset_class!r}; inferring")
+            asset_class = _infer_asset_class(ticker_raw, isin)
+    else:
+        asset_class = _infer_asset_class(ticker_raw, isin)
 
     return ParsedRow(
         date=date,
         type_=type_,
-        ticker=row["ticker"].strip().upper(),
-        isin=(row.get("isin") or "").strip() or None,
+        ticker=ticker_raw.strip().upper(),
+        isin=isin,
         asset_class=asset_class,
         quantity=qty,
         unit_price_eur=price,
@@ -97,13 +228,18 @@ def _parse_row(row: dict[str, str], ctx: IngestionContext) -> ParsedRow | None:
     )
 
 
+def _build_position_index(portfolio: Portfolio) -> dict[str, Position]:
+    return {p.ticker: p for p in portfolio.positions}
+
+
 def _get_or_create_position(
-    db: Session, portfolio: Portfolio, parsed: ParsedRow, ctx: IngestionContext
+    db: Session,
+    portfolio: Portfolio,
+    parsed: ParsedRow,
+    index: dict[str, Position],
+    ctx: IngestionContext,
 ) -> Position:
-    existing = next(
-        (p for p in portfolio.positions if p.ticker == parsed.ticker),
-        None,
-    )
+    existing = index.get(parsed.ticker)
     if existing is not None:
         ctx.positions_updated += 1
         if parsed.isin and not existing.isin:
@@ -120,6 +256,7 @@ def _get_or_create_position(
     db.add(pos)
     db.flush()  # populate pos.id for lot FK
     portfolio.positions.append(pos)
+    index[parsed.ticker] = pos
     ctx.positions_created += 1
     return pos
 
@@ -141,21 +278,46 @@ def _recompute_weighted_avg(position: Position) -> None:
 def ingest_csv(db: Session, portfolio: Portfolio, raw_csv: str) -> IngestResult:
     ctx = IngestionContext()
     reader = csv.DictReader(StringIO(raw_csv))
+    fieldnames = list(reader.fieldnames or [])
+    if not fieldnames:
+        return IngestResult(
+            rows_read=0,
+            positions_created=0,
+            positions_updated=0,
+            lots_created=0,
+            warnings=["CSV has no header row"],
+        )
+
+    ctx.detected_format = _detect_format(fieldnames)
+    column_map = _build_column_map(fieldnames)
+    if not column_map:
+        return IngestResult(
+            rows_read=0,
+            positions_created=0,
+            positions_updated=0,
+            lots_created=0,
+            warnings=[
+                f"No recognised columns found. Detected format: {ctx.detected_format}. "
+                f"Headers: {fieldnames}"
+            ],
+        )
+
+    index = _build_position_index(portfolio)
 
     for row in reader:
         ctx.rows_read += 1
-        parsed = _parse_row(row, ctx)
+        parsed = _parse_row(row, column_map, ctx)
         if parsed is None:
             continue
 
-        pos = _get_or_create_position(db, portfolio, parsed, ctx)
+        pos = _get_or_create_position(db, portfolio, parsed, index, ctx)
         lot = Lot(
             position_id=pos.id,
             purchased_at=parsed.date,
             quantity=parsed.quantity,
             unit_cost_eur=parsed.unit_price_eur,
             fees_eur=parsed.fees_eur,
-            source="tr_csv",
+            source=ctx.detected_format,
         )
         pos.lots.append(lot)
         db.add(lot)
@@ -163,10 +325,13 @@ def ingest_csv(db: Session, portfolio: Portfolio, raw_csv: str) -> IngestResult:
         _recompute_weighted_avg(pos)
 
     db.commit()
+    warnings = ctx.warnings
+    if ctx.detected_format != "sunday_native":
+        warnings = [f"Detected format: {ctx.detected_format}", *warnings]
     return IngestResult(
         rows_read=ctx.rows_read,
         positions_created=ctx.positions_created,
         positions_updated=ctx.positions_updated,
         lots_created=ctx.lots_created,
-        warnings=ctx.warnings,
+        warnings=warnings,
     )

@@ -28,6 +28,10 @@ out/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.tsbuildinfo
+
+# uv (we use pip + requirements.txt; uv.lock is local only)
+uv.lock
 
 # IDE
 .vscode/
