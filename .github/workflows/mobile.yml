@@ -1,0 +1,54 @@
+name: Mobile build (Capacitor)
+
+# Scaffold for the iOS + Android build pipeline. Manual-only (workflow_dispatch)
+# so it never blocks PR CI, and it no-ops cleanly until the Capacitor projects
+# exist (web/ios, web/android). The iOS job runs on a GitHub-hosted macOS
+# runner — the free "cloud Mac" that lets a Windows developer build/sign iOS.
+#
+# When Capacitor is added, replace the "Not configured yet" guards with the real
+# build steps (sketched in comments) and wire signing secrets in repo settings.
+on:
+  workflow_dispatch:
+
+jobs:
+  android:
+    name: Android (AAB)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard — Capacitor Android project present?
+        run: |
+          if [ ! -d android ]; then
+            echo "::warning::No Capacitor Android project (web/android) yet — pipeline activates once Capacitor is added."
+            exit 0
+          fi
+      # Future:
+      # - uses: actions/setup-node@v4 { node-version: 20, cache: npm }
+      # - uses: actions/setup-java@v4 { distribution: temurin, java-version: 17 }
+      # - run: npm ci && npm run build && npx cap sync android
+      # - run: cd android && ./gradlew bundleRelease
+      # - sign with KEYSTORE secret; upload AAB artifact / Play internal track
+
+  ios:
+    name: iOS (IPA)
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard — Capacitor iOS project present?
+        run: |
+          if [ ! -d ios ]; then
+            echo "::warning::No Capacitor iOS project (web/ios) yet — pipeline activates once Capacitor is added."
+            exit 0
+          fi
+      # Future:
+      # - uses: actions/setup-node@v4 { node-version: 20, cache: npm }
+      # - run: npm ci && npm run build && npx cap sync ios
+      # - import signing cert + provisioning profile from secrets
+      # - run: xcodebuild -workspace ios/App/App.xcworkspace -scheme App archive ...
+      # - export IPA; upload to TestFlight via altool/fastlane
