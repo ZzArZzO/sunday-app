@@ -5,12 +5,26 @@ session creation are thin wrappers over the Stripe SDK and are exercised against
 a sandbox separately.
 """
 
+import hashlib
+import hmac
+import json
+import time
 from datetime import timezone
 
 import pytest
+import stripe
 
+from app.config import get_settings
 from app.models import User
-from app.services.billing import subscription
+from app.services.billing import subscription, webhooks
+
+
+def _signed_header(payload: bytes, secret: str) -> str:
+    """Build a valid Stripe-Signature header: t=<ts>,v1=HMAC-SHA256(secret, "ts.payload")."""
+    ts = int(time.time())
+    prefix = f"{ts}.".encode()
+    sig = hmac.new(secret.encode(), prefix + payload, hashlib.sha256).hexdigest()
+    return f"t={ts},v1={sig}"
 
 
 class TestTier:
@@ -81,3 +95,61 @@ class TestApplySubscription:
             current_period_end=None,
         )
         assert result is None
+
+
+class TestWebhook:
+    def _configure(self, monkeypatch) -> str:
+        settings = get_settings()
+        monkeypatch.setattr(settings, "stripe_api_key", "sk_test_dummy")
+        monkeypatch.setattr(settings, "stripe_webhook_secret", "whsec_test_secret")
+        return "whsec_test_secret"
+
+    def test_verified_subscription_event_upgrades_user(self, db, monkeypatch):
+        secret = self._configure(monkeypatch)
+        user = User(email="w@test.com", stripe_customer_id="cus_x")
+        db.add(user)
+        db.commit()
+
+        event = {
+            "type": "customer.subscription.created",
+            "data": {
+                "object": {
+                    "id": "sub_1",
+                    "customer": "cus_x",
+                    "status": "active",
+                    "current_period_end": 1_800_000_000,
+                }
+            },
+        }
+        payload = json.dumps(event).encode()
+
+        etype = webhooks.process_event(db, payload, _signed_header(payload, secret))
+
+        assert etype == "customer.subscription.created"
+        assert user.subscription_status == "active"
+        assert subscription.is_pro(user) is True
+
+    def test_subscription_deleted_downgrades_user(self, db, monkeypatch):
+        secret = self._configure(monkeypatch)
+        user = User(
+            email="w@test.com", stripe_customer_id="cus_x", subscription_status="active"
+        )
+        db.add(user)
+        db.commit()
+
+        event = {
+            "type": "customer.subscription.deleted",
+            "data": {"object": {"id": "sub_1", "customer": "cus_x", "status": "canceled"}},
+        }
+        payload = json.dumps(event).encode()
+
+        webhooks.process_event(db, payload, _signed_header(payload, secret))
+
+        assert user.subscription_status == "canceled"
+        assert subscription.is_pro(user) is False
+
+    def test_bad_signature_is_rejected(self, db, monkeypatch):
+        self._configure(monkeypatch)
+        payload = b'{"type":"customer.subscription.created","data":{"object":{}}}'
+        with pytest.raises(stripe.error.SignatureVerificationError):
+            webhooks.process_event(db, payload, "t=1,v1=deadbeef")
