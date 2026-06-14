@@ -33,6 +33,13 @@ Working product, pre-billing. The full loop runs end to end:
 ### Sprint 3 — PDF render (DONE)
 - `services/delivery/pdf_render.py` (fpdf2, pure-Python, Unicode→latin-1 sanitized), `GET /api/briefing/pdf` download endpoint, PDF **attached to the weekly delivery email**. `fpdf2` added to `requirements.txt`. Sample at `C:\Users\Costa\Desktop\sunday-briefing-sample.pdf`.
 
+### Sprint 4 — Stripe billing (SCAFFOLDED, 2026-06-14)
+- **Billing rails** (test-mode-safe; 503 without keys, like the LLM/email tiers): `services/billing/` (`client`, `subscription` pure tier logic, `checkout`, `portal`, `webhooks`), `routes/billing.py` (`GET /subscription`, `POST /checkout`, `POST /portal`, signature-verified `POST /webhook`). Stripe state on `User` (migration `0006`), config `STRIPE_API_KEY`/`STRIPE_WEBHOOK_SECRET`/`STRIPE_PRICE_PRO`, `stripe` dep. Frontend `/billing` page (Upgrade/Manage) + `lib/api` helpers.
+- **First Pro gate:** `/api/benchmark` returns a graceful "Pro feature — upgrade" state for free users (no error; dashboard shows an Upgrade button). Pro users get the real comparison. Mechanism = `subscription.is_pro(user)`; reuse it to gate further features.
+- **Approach:** Checkout Sessions + Customer Portal + webhooks as source of truth; restricted key in env; Stripe Tax for EU VAT; no `payment_method_types`. 10 billing tests; full suite green.
+- **To go live (needs a Stripe account):** restricted key → `STRIPE_API_KEY`; create €9/mo Price → `STRIPE_PRICE_PRO`; `stripe listen --forward-to localhost:8000/api/billing/webhook` → `STRIPE_WEBHOOK_SECRET`; test with card `4242…`.
+- **Not done:** live Stripe round-trip (needs keys); gating beyond benchmark; nav link to `/billing`.
+
 ### Sprint 3 — delivery UI + weekly opt-in (DONE, 2026-06-14)
 - **Frontend delivery surface** on `/briefing`: `components/BriefingActions.tsx` (Download PDF via a credentialed blob fetch + Email-me-this-briefing, honest dry-run labelling) and `components/WeeklyOptInToggle.tsx`. Web client gained `sendMyBriefing`, `fetchBriefingPdf`, `fetch/updateDeliveryPreferences` in `lib/api.ts` + `DeliveryResult`/`DeliveryPreferences` in `lib/types.ts`.
 - **Per-user weekly opt-in:** `User.weekly_opt_in` (default off), migration `0005_weekly_opt_in` (applied), `GET`/`PUT /api/delivery/preferences`, and `deliver_weekly` now sends **only to opted-in users** (no unsolicited briefings — also a launch-safety fix). 2 new tests.
@@ -71,7 +78,7 @@ Done. The full magic-link round-trip ran green against the Docker stack (see TL;
 
 ## 🔜 Not started
 
-- **Sprint 4 — Stripe / payments** (no paid tier wired).
+- **Sprint 4 — Stripe / payments**: rails scaffolded (see Done). Remaining: live keys + a real Pro Price, broader Pro gating, a `/billing` nav entry, and the live Checkout/webhook round-trip.
 - Passkeys (magic-link covers auth for now).
 - Tax-flag engine for all 5 countries (DE scaffolded; PT/FR/NL/ES to follow).
 - Briefing persistence (history of past briefings — generated fresh on demand today).
@@ -88,4 +95,4 @@ Done. The full magic-link round-trip ran green against the Docker stack (see TL;
 
 ## Recommended next step
 
-**Sprint 4 — Stripe billing** (Free + Pro €9/mo per the blueprint). Phase B is verified and the Sprint 3 delivery surface is shipped. Before any *cloud* weekly send, also land the two launch-safety items: `(user_id, iso_week)` idempotency guard on `deliver_weekly` and pin the scheduler to a single always-on instance. And patch the seed script to advance Postgres sequences (see resolved loose thread).
+**Finish Sprint 4 — Stripe billing.** Rails are scaffolded (Checkout/Portal/webhook + first Pro gate on benchmark). Next: drop in a Stripe sandbox restricted key + a real €9/mo Price + `stripe listen` webhook secret, run the live Checkout→webhook round-trip, then extend `subscription.is_pro` gating to the other Pro features and add a `/billing` nav entry. Before any *cloud* weekly send, also land the two launch-safety items: `(user_id, iso_week)` idempotency guard on `deliver_weekly` and pin the scheduler to a single always-on instance. And patch the seed script to advance Postgres sequences (see resolved loose thread).
