@@ -10,6 +10,7 @@ const links = [
   { href: "/plan", label: "Plan" },
   { href: "/briefing", label: "Briefing" },
   { href: "/assistant", label: "Assistant" },
+  { href: "/billing", label: "Billing" },
 ];
 
 /**
