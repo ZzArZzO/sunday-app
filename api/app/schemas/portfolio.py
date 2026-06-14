@@ -39,6 +39,8 @@ class ConcentrationItem(BaseModel):
 class PortfolioResponse(BaseModel):
     portfolio_id: int
     as_of: str
+    # User's tax-residence country (ISO-3166 alpha-2) — drives locale formatting.
+    country: str = "DE"
     fx_eur_usd: Decimal
     total_value: DualMoney
     total_cost: DualMoney

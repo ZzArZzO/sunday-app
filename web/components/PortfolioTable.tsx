@@ -1,6 +1,7 @@
 import type { PositionView } from "@/lib/types";
 import { TrendArrow } from "@/components/TrendArrow";
-import { formatDual, formatPct, formatQuantity } from "@/lib/format";
+import { formatDual, formatEur, formatPct, formatQuantity } from "@/lib/format";
+import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/locale";
 
 const ASSET_CLASS_LABEL: Record<string, string> = {
   stock: "Stock",
@@ -9,7 +10,13 @@ const ASSET_CLASS_LABEL: Record<string, string> = {
   cash: "Cash",
 };
 
-export function PortfolioTable({ positions }: { positions: PositionView[] }) {
+export function PortfolioTable({
+  positions,
+  locale = DEFAULT_LOCALE,
+}: {
+  positions: PositionView[];
+  locale?: SupportedLocale;
+}) {
   if (positions.length === 0) {
     return (
       <div className="card p-10 text-center">
@@ -61,25 +68,25 @@ export function PortfolioTable({ positions }: { positions: PositionView[] }) {
                     </span>
                   </Td>
                   <Td align="right" mono>
-                    {formatQuantity(p.quantity, p.asset_class)}
+                    {formatQuantity(p.quantity, p.asset_class, locale)}
                   </Td>
                   <Td align="right" mono>
-                    {Number(p.avg_cost_eur).toFixed(2)}
+                    {formatEur(p.avg_cost_eur, locale)}
                   </Td>
                   <Td align="right" mono>
-                    {formatDual(p.market_value)}
+                    {formatDual(p.market_value, locale)}
                   </Td>
                   <Td align="right" mono className={pnlClass}>
                     <span className="inline-flex items-center justify-end gap-1">
                       <TrendArrow value={pnl} />
                       <span>
                         {pnl > 0 ? "+" : ""}
-                        {formatDual(p.unrealised_pnl)}
+                        {formatDual(p.unrealised_pnl, locale)}
                       </span>
                     </span>
                   </Td>
                   <Td align="right" mono>
-                    {formatPct(p.weight_pct)}
+                    {formatPct(p.weight_pct, locale)}
                   </Td>
                 </tr>
               );

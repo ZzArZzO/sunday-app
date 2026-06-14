@@ -5,6 +5,7 @@ import type {
   ChatMessage,
   ChatResponse,
   DividendResponse,
+  EventsResponse,
   FireResponse,
   IngestPreviewResponse,
   IngestResult,
@@ -63,6 +64,10 @@ export async function fetchRebalance(): Promise<RebalanceResponse> {
 
 export async function fetchBenchmark(index: string): Promise<BenchmarkResponse> {
   return http<BenchmarkResponse>(`/api/benchmark?index=${encodeURIComponent(index)}`);
+}
+
+export async function fetchEvents(): Promise<EventsResponse> {
+  return http<EventsResponse>("/api/events");
 }
 
 export async function refreshPrices(): Promise<PriceRefreshResponse> {

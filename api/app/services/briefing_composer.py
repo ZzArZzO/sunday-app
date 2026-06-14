@@ -245,6 +245,7 @@ def compose_briefing(portfolio: Portfolio) -> BriefingResponse:
         portfolio_id=portfolio.id,
         week_of=today,
         generated_at=datetime.now(timezone.utc).isoformat(),
+        country=country_code,
         fx_eur_usd=quote.rate,
         net_worth=fx.dual(total_value_eur, quote.rate),
         wow_delta=fx.dual(wow.delta_eur, quote.rate),

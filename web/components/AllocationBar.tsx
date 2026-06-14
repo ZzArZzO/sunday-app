@@ -1,4 +1,5 @@
 import { formatPct } from "@/lib/format";
+import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/locale";
 
 // A calm, zero-dependency 100%-stacked allocation bar with a legend. Replaces
 // the flat percentage-card grid. Top-level split only (asset class); the
@@ -37,7 +38,13 @@ function buildSegments(split: Record<string, string>): Segment[] {
     }));
 }
 
-export function AllocationBar({ split }: { split: Record<string, string> }) {
+export function AllocationBar({
+  split,
+  locale = DEFAULT_LOCALE,
+}: {
+  split: Record<string, string>;
+  locale?: SupportedLocale;
+}) {
   const segments = buildSegments(split);
   if (segments.length === 0) {
     return <p className="text-sm text-ink-muted">No allocation to show yet.</p>;
@@ -72,7 +79,7 @@ export function AllocationBar({ split }: { split: Record<string, string> }) {
               style={{ backgroundColor: s.color }}
             />
             <span className="text-ink-muted">{s.label}</span>
-            <span className="font-mono tabular-nums text-ink">{formatPct(String(s.pct))}</span>
+            <span className="font-mono tabular-nums text-ink">{formatPct(String(s.pct), locale)}</span>
           </li>
         ))}
       </ul>

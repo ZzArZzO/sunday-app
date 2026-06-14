@@ -32,6 +32,7 @@ export type ConcentrationItem = {
 export type PortfolioResponse = {
   portfolio_id: number;
   as_of: string;
+  country: string;
   fx_eur_usd: string;
   total_value: DualMoney;
   total_cost: DualMoney;
@@ -52,6 +53,7 @@ export type BriefingResponse = {
   portfolio_id: number;
   week_of: string;
   generated_at: string;
+  country: string;
   fx_eur_usd: string;
   net_worth: DualMoney;
   wow_delta: DualMoney;
@@ -201,6 +203,29 @@ export type RebalanceResponse = {
   needs_rebalance: boolean;
   legs: RebalanceLeg[];
   method: string;
+  notes: string[];
+};
+
+// --- Events (what changed this week) -------------------------------------
+
+export type NewsItemView = {
+  holding: string;
+  title: string;
+  summary: string;
+  publisher: string | null;
+  url: string | null;
+  published_at: string | null;
+};
+
+export type EarningsEventView = {
+  ticker: string;
+  date: string;
+};
+
+export type EventsResponse = {
+  as_of: string;
+  news: NewsItemView[];
+  earnings: EarningsEventView[];
   notes: string[];
 };
 

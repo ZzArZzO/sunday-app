@@ -19,6 +19,7 @@ import {
   fetchTax,
 } from "@/lib/api";
 import { formatDual } from "@/lib/format";
+import { localeForCountry } from "@/lib/locale";
 
 export const dynamic = "force-dynamic";
 
@@ -51,6 +52,7 @@ export default async function DashboardPage() {
     );
   }
 
+  const locale = localeForCountry(portfolio.country);
   const pnl = Number(portfolio.total_pnl.eur);
   const pnlClass =
     pnl > 0 ? "text-positive" : pnl < 0 ? "text-negative" : "text-ink-muted";
@@ -62,13 +64,13 @@ export default async function DashboardPage() {
       <header className="space-y-4">
         <p className="label">As of {new Date(portfolio.as_of).toLocaleDateString()}</p>
         <h1 className="font-sans text-4xl font-semibold leading-none tracking-tighter text-ink sm:text-5xl md:text-6xl">
-          {formatDual(portfolio.total_value)}
+          {formatDual(portfolio.total_value, locale)}
         </h1>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-ink-muted">
-          <Stat label="Cost basis" value={formatDual(portfolio.total_cost)} />
+          <Stat label="Cost basis" value={formatDual(portfolio.total_cost, locale)} />
           <Stat
             label="Unrealised"
-            value={`${pnlSign}${formatDual(portfolio.total_pnl)}`}
+            value={`${pnlSign}${formatDual(portfolio.total_pnl, locale)}`}
             valueClass={pnlClass}
             trend={pnl}
           />
@@ -85,7 +87,7 @@ export default async function DashboardPage() {
       <section className="space-y-4">
         <p className="label">By asset class</p>
         <div className="card p-5">
-          <AllocationBar split={portfolio.asset_class_split} />
+          <AllocationBar split={portfolio.asset_class_split} locale={locale} />
         </div>
       </section>
 
@@ -103,7 +105,7 @@ export default async function DashboardPage() {
 
       <section className="space-y-4">
         <p className="label">Concentration</p>
-        <ConcentrationCard items={portfolio.concentration} />
+        <ConcentrationCard items={portfolio.concentration} locale={locale} />
       </section>
 
       <section className="space-y-4">
@@ -114,13 +116,13 @@ export default async function DashboardPage() {
           </p>
         </div>
         <div className="card p-5">
-          <AllocationTreemap positions={portfolio.positions} />
+          <AllocationTreemap positions={portfolio.positions} locale={locale} />
         </div>
       </section>
 
       <section className="space-y-4">
         <p className="label">Positions</p>
-        <PortfolioTable positions={portfolio.positions} />
+        <PortfolioTable positions={portfolio.positions} locale={locale} />
       </section>
 
       <Disclaimer

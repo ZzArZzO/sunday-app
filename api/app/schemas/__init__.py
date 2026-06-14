@@ -1,5 +1,7 @@
+from app.schemas.auth import MagicLinkRequest, MagicLinkResponse, MeResponse
 from app.schemas.briefing import BriefingResponse, BriefingSection
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse
+from app.schemas.delivery import DeliveryResultView, WeeklyDeliverySummary
 from app.schemas.dividend import DividendPositionView, DividendResponse
 from app.schemas.events import EarningsEventView, EventsResponse, NewsItemView
 from app.schemas.fire import FireResponse, FireTimelinePoint
@@ -22,9 +24,14 @@ __all__ = [
     "ChatRequest",
     "ChatResponse",
     "ConcentrationItem",
+    "DeliveryResultView",
+    "MagicLinkRequest",
+    "MagicLinkResponse",
+    "MeResponse",
     "DividendPositionView",
     "DividendResponse",
     "EarningsEventView",
+    "WeeklyDeliverySummary",
     "EventsResponse",
     "NewsItemView",
     "DualMoney",

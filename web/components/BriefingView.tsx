@@ -3,6 +3,7 @@ import { ConcentrationCard } from "@/components/ConcentrationCard";
 import { Disclaimer } from "@/components/Disclaimer";
 import { Sparkline } from "@/components/Sparkline";
 import { formatDual, formatPct } from "@/lib/format";
+import { localeForCountry } from "@/lib/locale";
 
 /** Safely pull a numeric `spark` series out of a section's loosely-typed data. */
 function sparkSeries(data: Record<string, unknown> | null): number[] | null {
@@ -19,6 +20,7 @@ function sparkSeries(data: Record<string, unknown> | null): number[] | null {
  * confident, contemporary.
  */
 export function BriefingView({ briefing }: { briefing: BriefingResponse }) {
+  const locale = localeForCountry(briefing.country);
   const wow = Number(briefing.wow_delta.eur);
   const wowClass =
     wow > 0 ? "text-positive" : wow < 0 ? "text-negative" : "text-ink-muted";
@@ -36,7 +38,7 @@ export function BriefingView({ briefing }: { briefing: BriefingResponse }) {
       <section className="card p-8">
         <p className="label">Net worth</p>
         <p className="mt-3 font-sans text-5xl font-semibold leading-none tracking-tighter text-ink sm:text-6xl">
-          {formatDual(briefing.net_worth)}
+          {formatDual(briefing.net_worth, locale)}
         </p>
         <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-base text-ink-muted">
           {briefing.wow_available ? (
@@ -45,13 +47,13 @@ export function BriefingView({ briefing }: { briefing: BriefingResponse }) {
                 <TrendIcon up={wow > 0} flat={wow === 0} className={wowClass} />
                 <span className={`font-mono tabular-nums ${wowClass}`}>
                   {wowSign}
-                  {formatPct(briefing.wow_delta_pct)}
+                  {formatPct(briefing.wow_delta_pct, locale)}
                 </span>
               </span>
               <span className="text-ink-subtle">·</span>
               <span className={`font-mono tabular-nums ${wowClass}`}>
                 {wowSign}
-                {formatDual(briefing.wow_delta)}
+                {formatDual(briefing.wow_delta, locale)}
               </span>
               {briefing.wow_baseline_date ? (
                 <>
@@ -85,7 +87,7 @@ export function BriefingView({ briefing }: { briefing: BriefingResponse }) {
           <h2 className="font-sans text-2xl font-semibold tracking-tight">
             Above your thresholds this week
           </h2>
-          <ConcentrationCard items={briefing.concentration_alerts} />
+          <ConcentrationCard items={briefing.concentration_alerts} locale={locale} />
         </section>
       ) : null}
 

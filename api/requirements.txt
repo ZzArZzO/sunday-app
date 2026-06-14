@@ -23,6 +23,9 @@ python-dateutil>=2.9
 yfinance>=0.2.66,<0.3
 curl_cffi>=0.7
 
+# --- Scheduling (weekly Sunday briefing cron; lazy-imported, only when enabled) ---
+apscheduler>=3.10,<4
+
 # --- AI (not used in the slice yet) ---
 anthropic>=0.40,<1
 

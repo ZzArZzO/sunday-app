@@ -45,6 +45,7 @@ def get_portfolio(portfolio: Portfolio = Depends(get_default_portfolio)) -> Port
     return PortfolioResponse(
         portfolio_id=portfolio.id,
         as_of=datetime.now(timezone.utc).isoformat(),
+        country=portfolio.user.country if portfolio.user else "DE",
         fx_eur_usd=quote.rate,
         total_value=fx.dual(total_value_eur, quote.rate),
         total_cost=fx.dual(total_cost_eur, quote.rate),

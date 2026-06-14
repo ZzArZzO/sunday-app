@@ -21,6 +21,8 @@ class BriefingResponse(BaseModel):
     portfolio_id: int
     week_of: str
     generated_at: str
+    # User's tax-residence country (ISO-3166 alpha-2) — drives locale formatting.
+    country: str = "DE"
     fx_eur_usd: Decimal
     net_worth: DualMoney
     wow_delta: DualMoney

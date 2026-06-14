@@ -10,6 +10,7 @@ from types import SimpleNamespace
 
 from app.schemas import BriefingResponse, BriefingSection
 from app.schemas.portfolio import DualMoney
+from app.services.llm import briefing_ai
 from app.services.llm.briefing_ai import NarrativeOut, _accept, apply_narrative, enhance
 
 
@@ -70,8 +71,12 @@ class TestAccept:
 
 
 class TestEnhanceNoKey:
-    def test_no_api_key_returns_deterministic_unchanged(self):
-        # The test env has no ANTHROPIC_API_KEY → enhance must no-op (no network).
+    def test_no_api_key_returns_deterministic_unchanged(self, monkeypatch):
+        # Force the no-key path deterministically (env may have a real key set),
+        # so this stays hermetic — no network, no LLM, no spend.
+        monkeypatch.setattr(
+            briefing_ai, "get_settings", lambda: SimpleNamespace(anthropic_api_key="")
+        )
         resp = _response()
         out, used = enhance(resp, SimpleNamespace(id=1))
         assert used is False

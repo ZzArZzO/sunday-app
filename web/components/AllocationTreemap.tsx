@@ -6,6 +6,7 @@ import { ParentSize } from "@visx/responsive";
 
 import type { PositionView } from "@/lib/types";
 import { formatDual, formatPct } from "@/lib/format";
+import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/locale";
 
 // Per-holding treemap: tile area ∝ market value, tile colour = gain/loss
 // (colour-blind-safe blue/orange). Spots concentration and which names carry
@@ -42,7 +43,13 @@ function toLeaf(p: PositionView): Leaf {
   };
 }
 
-export function AllocationTreemap({ positions }: { positions: PositionView[] }) {
+export function AllocationTreemap({
+  positions,
+  locale = DEFAULT_LOCALE,
+}: {
+  positions: PositionView[];
+  locale?: SupportedLocale;
+}) {
   const leaves = positions.map(toLeaf).filter((l) => l.value > 0);
   if (leaves.length === 0) {
     return <p className="text-sm text-ink-muted">No holdings to chart yet.</p>;
@@ -52,7 +59,7 @@ export function AllocationTreemap({ positions }: { positions: PositionView[] }) 
     "Holdings by market value: " +
     [...leaves]
       .sort((a, b) => b.value - a.value)
-      .map((l) => `${l.ticker} ${formatPct(String(l.pnlPct))}`)
+      .map((l) => `${l.ticker} ${formatPct(String(l.pnlPct), locale)}`)
       .join(", ");
 
   const data: TreeData = { ticker: "root", children: leaves };
@@ -62,7 +69,7 @@ export function AllocationTreemap({ positions }: { positions: PositionView[] }) 
       <ParentSize>
         {({ width }) =>
           width > 0 ? (
-            <TreemapSvg data={data} width={width} height={HEIGHT} />
+            <TreemapSvg data={data} width={width} height={HEIGHT} locale={locale} />
           ) : null
         }
       </ParentSize>
@@ -74,10 +81,12 @@ function TreemapSvg({
   data,
   width,
   height,
+  locale,
 }: {
   data: TreeData;
   width: number;
   height: number;
+  locale: SupportedLocale;
 }) {
   const root = hierarchy<TreeData | Leaf>(data, (d) =>
     "children" in d ? d.children : null,
@@ -114,9 +123,9 @@ function TreemapSvg({
                       stroke="rgb(var(--bg))"
                       strokeWidth={2}
                     >
-                      <title>{`${leaf.ticker} · ${formatDual(leaf.marketValue)} · ${
+                      <title>{`${leaf.ticker} · ${formatDual(leaf.marketValue, locale)} · ${
                         leaf.pnlPct >= 0 ? "+" : ""
-                      }${formatPct(String(leaf.pnlPct))}`}</title>
+                      }${formatPct(String(leaf.pnlPct), locale)}`}</title>
                     </rect>
                     {showLabel ? (
                       <text

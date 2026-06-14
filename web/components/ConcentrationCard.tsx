@@ -1,5 +1,6 @@
 import type { ConcentrationItem } from "@/lib/types";
 import { formatPct } from "@/lib/format";
+import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/locale";
 
 const SEVERITY_STYLES: Record<
   ConcentrationItem["severity"],
@@ -22,7 +23,13 @@ const SEVERITY_STYLES: Record<
   },
 };
 
-export function ConcentrationCard({ items }: { items: ConcentrationItem[] }) {
+export function ConcentrationCard({
+  items,
+  locale = DEFAULT_LOCALE,
+}: {
+  items: ConcentrationItem[];
+  locale?: SupportedLocale;
+}) {
   if (items.length === 0) {
     return (
       <div className="card p-5">
@@ -48,7 +55,7 @@ export function ConcentrationCard({ items }: { items: ConcentrationItem[] }) {
               <span
                 className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${styles.tag}`}
               >
-                Above {formatPct(item.threshold_pct)}
+                Above {formatPct(item.threshold_pct, locale)}
               </span>
             </div>
             <div className="mt-3 flex items-baseline justify-between gap-4">
@@ -56,7 +63,7 @@ export function ConcentrationCard({ items }: { items: ConcentrationItem[] }) {
                 {item.ticker}
               </span>
               <span className="font-mono text-2xl tabular-nums text-ink">
-                {formatPct(item.weight_pct)}
+                {formatPct(item.weight_pct, locale)}
               </span>
             </div>
           </li>

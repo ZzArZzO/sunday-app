@@ -3,9 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routes import (
+    auth,
     benchmark,
     briefing,
     chat,
+    delivery,
     dividend,
     events,
     fire,
@@ -50,3 +52,13 @@ app.include_router(prices.router)
 app.include_router(snapshots.router)
 app.include_router(events.router)
 app.include_router(benchmark.router)
+app.include_router(delivery.router)
+app.include_router(auth.router)
+
+
+@app.on_event("startup")
+def _start_weekly_scheduler() -> None:
+    # No-op unless ENABLE_SCHEDULER is set; starts the Sunday briefing cron.
+    from app.services.delivery import scheduler
+
+    scheduler.start()
