@@ -32,6 +32,9 @@ fpdf2>=2.7,<3
 # --- AI (not used in the slice yet) ---
 anthropic>=0.40,<1
 
+# --- Billing (Stripe subscriptions; only used when STRIPE_API_KEY is set) ---
+stripe>=11,<13
+
 # --- Dev / test ---
 pytest>=8.3
 pytest-asyncio>=0.24

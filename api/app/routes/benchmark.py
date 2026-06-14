@@ -9,11 +9,12 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
 
-from app.deps import get_default_portfolio
-from app.models import Portfolio
+from app.deps import get_current_user, get_default_portfolio
+from app.models import Portfolio, User
 from app.schemas.benchmark import BenchmarkPoint, BenchmarkResponse
 from app.services import benchmark, fx
 from app.services.benchmark import BENCHMARKS, DEFAULT_BENCHMARK
+from app.services.billing import subscription
 from app.services.prices.yfinance_provider import YFinanceProvider
 
 router = APIRouter(prefix="/api/benchmark", tags=["benchmark"])
@@ -23,8 +24,24 @@ router = APIRouter(prefix="/api/benchmark", tags=["benchmark"])
 def get_benchmark(
     index: str = Query(default=DEFAULT_BENCHMARK),
     portfolio: Portfolio = Depends(get_default_portfolio),
+    user: User = Depends(get_current_user),
 ) -> BenchmarkResponse:
     key = index if index in BENCHMARKS else DEFAULT_BENCHMARK
+
+    # Benchmark comparison is a Pro feature. Degrade gracefully (no error) so the
+    # dashboard shows an upgrade prompt instead of breaking for free users.
+    if not subscription.is_pro(user):
+        return BenchmarkResponse(
+            available=False,
+            index_key=key,
+            index_name=BENCHMARKS[key].name,
+            index_available=False,
+            note=(
+                "Benchmark comparison is a Pro feature — upgrade to compare your "
+                "portfolio against MSCI World or the S&P 500."
+            ),
+        )
+
     comparison = benchmark.build_comparison(list(portfolio.snapshots), key, YFinanceProvider())
 
     quote = fx.get_eur_usd()

@@ -39,6 +39,15 @@ class Settings(BaseSettings):
 
     demo_user_id: int = 1
 
+    # --- Billing (Stripe) ---
+    # Use a RESTRICTED key (rk_…) with least privilege, never a secret key in source.
+    # Empty → billing disabled (endpoints return 503), like the LLM/email tiers.
+    stripe_api_key: str = ""
+    # Webhook signing secret (whsec_…). Required to accept webhook events.
+    stripe_webhook_secret: str = ""
+    # Price ID (price_…) for the Pro €9/mo plan, created in the Stripe Dashboard.
+    stripe_price_pro: str = ""
+
     model_config = SettingsConfigDict(
         env_file="../.env",
         env_file_encoding="utf-8",

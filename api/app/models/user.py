@@ -37,6 +37,14 @@ class User(Base):
     # users who explicitly subscribe (no unsolicited briefings).
     weekly_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # --- Billing (Stripe). Webhooks are the source of truth for these. ---
+    stripe_customer_id: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
+    stripe_subscription_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    subscription_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    subscription_period_end: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     portfolios: Mapped[list["Portfolio"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"
     )

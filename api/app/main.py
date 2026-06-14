@@ -5,6 +5,7 @@ from app.config import get_settings
 from app.routes import (
     auth,
     benchmark,
+    billing,
     briefing,
     chat,
     delivery,
@@ -54,6 +55,7 @@ app.include_router(events.router)
 app.include_router(benchmark.router)
 app.include_router(delivery.router)
 app.include_router(auth.router)
+app.include_router(billing.router)
 
 
 @app.on_event("startup")
