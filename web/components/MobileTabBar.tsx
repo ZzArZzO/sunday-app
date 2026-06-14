@@ -15,7 +15,7 @@ const TABS: Tab[] = [
   { href: "/briefing", label: "Briefing", icon: <BriefingIcon /> },
   { href: "/dashboard", label: "Portfolio", icon: <DashboardIcon /> },
   { href: "/assistant", label: "Assistant", icon: <ChatIcon /> },
-  { href: "/fire", label: "Plan", icon: <PlanIcon /> },
+  { href: "/plan", label: "Plan", icon: <PlanIcon /> },
   { href: "/upload", label: "Import", icon: <ImportIcon /> },
 ];
 

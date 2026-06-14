@@ -1,4 +1,5 @@
 import type { PositionView } from "@/lib/types";
+import { HoldingsMobileList } from "@/components/HoldingsMobileList";
 import { TrendArrow } from "@/components/TrendArrow";
 import { formatDual, formatEur, formatPct, formatQuantity } from "@/lib/format";
 import { DEFAULT_LOCALE, type SupportedLocale } from "@/lib/locale";
@@ -30,12 +31,8 @@ export function PortfolioTable({
 
   return (
     <>
-      {/* Mobile: one card per holding (tables don't fit phones). */}
-      <ul className="space-y-3 md:hidden">
-        {positions.map((p) => (
-          <HoldingCard key={p.id} position={p} locale={locale} />
-        ))}
-      </ul>
+      {/* Mobile: tappable card per holding → detail bottom sheet. */}
+      <HoldingsMobileList positions={positions} locale={locale} />
 
       {/* Desktop: the full sortable table. */}
       <div className="card hidden overflow-hidden md:block">
