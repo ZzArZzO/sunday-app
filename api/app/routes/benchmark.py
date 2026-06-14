@@ -37,7 +37,7 @@ def get_benchmark(
             index_name=BENCHMARKS[key].name,
             index_available=False,
             note=(
-                "Benchmark comparison is a Pro feature — upgrade to compare your "
+                "Benchmark comparison is a Pro feature. Upgrade to compare your "
                 "portfolio against MSCI World or the S&P 500."
             ),
         )

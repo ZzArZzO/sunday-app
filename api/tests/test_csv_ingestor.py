@@ -1,5 +1,6 @@
 from decimal import Decimal
 
+import pytest
 from sqlalchemy.orm import Session
 
 from app.models import Portfolio, User
@@ -127,3 +128,24 @@ def test_split_without_ratio_is_flagged_not_applied(db: Session) -> None:
 
     assert aapl.quantity == Decimal("10.00000000")  # unchanged — not guessed
     assert any("SPLIT_FLAGGED" in w for w in result.warnings)
+
+
+def test_holdings_cap_blocks_over_limit_import(db: Session) -> None:
+    portfolio = _seed_user_and_portfolio(db)
+    db.commit()  # persist the seed so the internal rollback only discards the ingest
+
+    # SAMPLE_CSV results in 2 holdings (VWCE, BTC); a cap of 1 must block it.
+    with pytest.raises(csv_ingestor.HoldingsLimitExceeded) as exc:
+        csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, max_holdings=1)
+
+    assert exc.value.limit == 1
+    assert exc.value.attempted == 2
+    assert portfolio.positions == []  # rolled back — no partial import
+
+
+def test_holdings_cap_allows_within_limit(db: Session) -> None:
+    portfolio = _seed_user_and_portfolio(db)
+
+    result = csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, max_holdings=2)
+
+    assert result.positions_created == 2

@@ -16,6 +16,9 @@ from app.models import User
 # Stripe subscription statuses that grant Pro access.
 PRO_STATUSES = frozenset({"active", "trialing"})
 
+# Free plan holdings cap (blueprint: Free is limited, Pro is unlimited).
+FREE_HOLDINGS_CAP = 15
+
 
 def is_pro(user: User) -> bool:
     return (user.subscription_status or "") in PRO_STATUSES
@@ -23,6 +26,11 @@ def is_pro(user: User) -> bool:
 
 def tier_for(user: User) -> str:
     return "pro" if is_pro(user) else "free"
+
+
+def holdings_limit(user: User) -> int | None:
+    """Max holdings for this user, or None for unlimited (Pro)."""
+    return None if is_pro(user) else FREE_HOLDINGS_CAP
 
 
 def _to_datetime(unix_seconds: int | None) -> datetime | None:

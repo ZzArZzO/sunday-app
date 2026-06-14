@@ -85,6 +85,17 @@ class ParsedRow:
     split_ratio: Decimal | None
 
 
+class HoldingsLimitExceeded(Exception):
+    """Raised when an import would push a free portfolio past its holdings cap."""
+
+    def __init__(self, limit: int, attempted: int) -> None:
+        self.limit = limit
+        self.attempted = attempted
+        super().__init__(
+            f"Free plan allows {limit} holdings; this import would result in {attempted}."
+        )
+
+
 @dataclass
 class IngestionContext:
     warnings: list[str] = field(default_factory=list)
@@ -467,7 +478,12 @@ def preview_csv(raw_csv: str) -> PreviewResult:
     return PreviewResult(detected, columns, unmapped, rows, ok, skipped, warnings)
 
 
-def ingest_csv(db: Session, portfolio: Portfolio, raw_csv: str) -> IngestResult:
+def ingest_csv(
+    db: Session,
+    portfolio: Portfolio,
+    raw_csv: str,
+    max_holdings: int | None = None,
+) -> IngestResult:
     ctx = IngestionContext()
     reader = csv.DictReader(StringIO(raw_csv))
     fieldnames = list(reader.fieldnames or [])
@@ -541,6 +557,14 @@ def ingest_csv(db: Session, portfolio: Portfolio, raw_csv: str) -> IngestResult:
             _apply(pool, r, ctx)
 
         _finalize_position(pos, pool)
+
+    # Enforce the holdings cap before persisting, so a free user never lands a
+    # partial import. `index` holds every position touched plus the pre-existing ones.
+    if max_holdings is not None:
+        held = sum(1 for p in index.values() if p.quantity is not None and p.quantity > 0)
+        if held > max_holdings:
+            db.rollback()
+            raise HoldingsLimitExceeded(max_holdings, held)
 
     db.commit()
 

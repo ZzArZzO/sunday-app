@@ -20,6 +20,7 @@ class WeeklyDeliverySummary(BaseModel):
 
 class DeliveryPreferencesView(BaseModel):
     weekly_opt_in: bool
+    is_pro: bool = False
 
 
 class DeliveryPreferencesUpdate(BaseModel):

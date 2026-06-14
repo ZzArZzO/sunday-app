@@ -111,18 +111,20 @@ class TestSenderDryRun:
 
 
 class TestWeeklyOptIn:
-    def test_deliver_weekly_only_selects_opted_in_users(self, db):
-        # Opted-in user has no portfolio → fails fast (no briefing build, no network),
-        # which still proves it was *selected*; the opted-out user must be skipped.
-        opted_in = User(email="in@test.com", weekly_opt_in=True)
-        opted_out = User(email="out@test.com", weekly_opt_in=False)
-        db.add_all([opted_in, opted_out])
+    def test_deliver_weekly_selects_only_opted_in_pro_users(self, db):
+        # Opted-in Pro user has no portfolio -> fails fast (no briefing build, no
+        # network), which still proves selection. The opted-out user is skipped, and
+        # the opted-in *free* user is skipped too (weekly email is Pro-only).
+        pro_in = User(email="pro@test.com", weekly_opt_in=True, subscription_status="active")
+        free_in = User(email="free@test.com", weekly_opt_in=True)  # opted in but free
+        opted_out = User(email="out@test.com", weekly_opt_in=False, subscription_status="active")
+        db.add_all([pro_in, free_in, opted_out])
         db.commit()
 
         summary = briefing_delivery.deliver_weekly(db)
 
         assert summary.total == 1
-        assert [r.email for r in summary.results] == ["in@test.com"]
+        assert [r.email for r in summary.results] == ["pro@test.com"]
         assert summary.results[0].ok is False
         assert summary.results[0].error == "user has no portfolio"
 

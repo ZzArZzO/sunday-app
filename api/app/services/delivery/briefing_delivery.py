@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import User
 from app.services import briefing_build
+from app.services.billing.subscription import PRO_STATUSES
 from app.services.delivery import email_render, pdf_render, sender
 
 
@@ -56,10 +57,14 @@ def deliver_to_user(user: User) -> DeliveryResult:
 
 
 def deliver_weekly(db: Session) -> WeeklySummary:
-    """Send this week's briefing to every user who opted in to the weekly email."""
+    """Send this week's briefing to every opted-in Pro user (the weekly email is Pro-only)."""
     users = list(
         db.execute(
-            select(User).where(User.email.isnot(None), User.weekly_opt_in.is_(True))
+            select(User).where(
+                User.email.isnot(None),
+                User.weekly_opt_in.is_(True),
+                User.subscription_status.in_(PRO_STATUSES),
+            )
         ).scalars()
     )
     results = [deliver_to_user(u) for u in users]

@@ -11,6 +11,7 @@ from app.schemas.ingest_preview import (
     PreviewRowView,
 )
 from app.services import csv_ingestor
+from app.services.billing import subscription
 
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
@@ -67,4 +68,15 @@ async def upload_csv(
         db.flush()
         user.portfolios.append(portfolio)
 
-    return csv_ingestor.ingest_csv(db, portfolio, text)
+    try:
+        return csv_ingestor.ingest_csv(
+            db, portfolio, text, max_holdings=subscription.holdings_limit(user)
+        )
+    except csv_ingestor.HoldingsLimitExceeded as exc:
+        raise HTTPException(
+            status_code=status.HTTP_402_PAYMENT_REQUIRED,
+            detail=(
+                f"Free plan is limited to {exc.limit} holdings; this import would "
+                f"result in {exc.attempted}. Upgrade to Pro for unlimited holdings."
+            ),
+        ) from exc

@@ -40,6 +40,12 @@ class TestTier:
         assert subscription.is_pro(user) is False
         assert subscription.tier_for(user) == "free"
 
+    def test_holdings_limit_caps_free_and_unlimits_pro(self):
+        free = User(email="a@test.com")
+        pro = User(email="b@test.com", subscription_status="active")
+        assert subscription.holdings_limit(free) == subscription.FREE_HOLDINGS_CAP
+        assert subscription.holdings_limit(pro) is None
+
 
 class TestApplySubscription:
     def test_applies_state_to_matching_customer(self, db):
