@@ -29,9 +29,18 @@ export function PortfolioTable({
   }
 
   return (
-    <div className="card overflow-hidden">
-      <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
+    <>
+      {/* Mobile: one card per holding (tables don't fit phones). */}
+      <ul className="space-y-3 md:hidden">
+        {positions.map((p) => (
+          <HoldingCard key={p.id} position={p} locale={locale} />
+        ))}
+      </ul>
+
+      {/* Desktop: the full sortable table. */}
+      <div className="card hidden overflow-hidden md:block">
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-rule bg-surface-2/60 text-left">
               <Th>Ticker</Th>
@@ -92,9 +101,59 @@ export function PortfolioTable({
               );
             })}
           </tbody>
-        </table>
+          </table>
+        </div>
       </div>
-    </div>
+    </>
+  );
+}
+
+function HoldingCard({
+  position,
+  locale,
+}: {
+  position: PositionView;
+  locale: SupportedLocale;
+}) {
+  const pnl = Number(position.unrealised_pnl.eur);
+  const cost = Number(position.cost_basis.eur);
+  const pnlPct = cost > 0 ? (pnl / cost) * 100 : 0;
+  const pnlClass = pnl > 0 ? "text-positive" : pnl < 0 ? "text-negative" : "text-ink-muted";
+  return (
+    <li className="card p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-semibold text-ink">{position.ticker}</span>
+            <span className="inline-flex items-center rounded-md border border-rule bg-surface-2 px-1.5 py-0.5 text-[11px] font-medium text-ink-muted">
+              {ASSET_CLASS_LABEL[position.asset_class] ?? position.asset_class}
+            </span>
+          </div>
+          {position.isin ? (
+            <span className="mt-0.5 block font-mono text-xs text-ink-subtle">{position.isin}</span>
+          ) : null}
+        </div>
+        <div className="text-right">
+          <p className="font-mono tabular-nums text-ink">{formatEur(position.market_value.eur, locale)}</p>
+          <p
+            className={`mt-0.5 inline-flex items-center justify-end gap-1 font-mono text-xs tabular-nums ${pnlClass}`}
+          >
+            <TrendArrow value={pnl} size={11} />
+            {pnl > 0 ? "+" : ""}
+            {formatPct(String(pnlPct), locale)}
+          </p>
+        </div>
+      </div>
+      <div className="mt-3 flex items-center justify-between text-xs text-ink-subtle">
+        <span className="font-mono">
+          {formatQuantity(position.quantity, position.asset_class, locale)} @{" "}
+          {formatEur(position.avg_cost_eur, locale)}
+        </span>
+        <span>
+          Weight <span className="font-mono text-ink-muted">{formatPct(position.weight_pct, locale)}</span>
+        </span>
+      </div>
+    </li>
   );
 }
 

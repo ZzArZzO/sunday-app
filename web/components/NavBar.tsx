@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { AuthStatus } from "@/components/AuthStatus";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
 const links = [
@@ -27,7 +28,7 @@ export function NavBar() {
           </span>
         </Link>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-1 sm:gap-2">
-          <nav className="min-w-0 flex-1 sm:flex-none">
+          <nav className="hidden min-w-0 flex-1 md:block md:flex-none">
             <ul className="flex items-center gap-1 overflow-x-auto scrollbar-none">
               {links.map((link) => (
                 <li key={link.href} className="flex-none">
@@ -42,6 +43,9 @@ export function NavBar() {
             </ul>
           </nav>
           <div className="ml-1 flex-none border-l border-rule pl-1 sm:ml-2 sm:pl-2">
+            <AuthStatus />
+          </div>
+          <div className="flex-none">
             <ThemeToggle />
           </div>
         </div>
