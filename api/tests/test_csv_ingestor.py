@@ -47,16 +47,83 @@ def test_ingest_computes_weighted_avg_cost(db: Session) -> None:
     assert vwce.avg_cost_eur == Decimal("110.1000")
 
 
-def test_ingest_skips_unsupported_rows(db: Session) -> None:
+def test_sell_reduces_quantity_and_keeps_avg_cost(db: Session) -> None:
     portfolio = _seed_user_and_portfolio(db)
     csv = (
         "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur\n"
-        "2024-01-15,sell,VWCE,IE00BK5BQT80,etf,1,100.00,1.00\n"
-        "2024-01-15,buy,VWCE,IE00BK5BQT80,etf,1,100.00,1.00\n"
+        "2024-01-15,buy,VWCE,IE00BK5BQT80,etf,10,100.00,0.00\n"
+        "2024-02-15,sell,VWCE,IE00BK5BQT80,etf,3,150.00,0.00\n"
     )
 
     result = csv_ingestor.ingest_csv(db, portfolio, csv)
+    vwce = next(p for p in portfolio.positions if p.ticker == "VWCE")
 
-    assert result.rows_read == 2
-    assert result.lots_created == 1
+    # EU average-cost: qty drops, avg cost is unchanged by a sale.
+    assert vwce.quantity == Decimal("7.00000000")
+    assert vwce.avg_cost_eur == Decimal("100.0000")
+    assert result.lots_created == 1  # only the buy is a lot
     assert any("sell" in w for w in result.warnings)
+
+
+def test_oversell_clamps_to_zero(db: Session) -> None:
+    portfolio = _seed_user_and_portfolio(db)
+    csv = (
+        "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur\n"
+        "2024-01-15,buy,VWCE,IE00BK5BQT80,etf,5,100.00,0.00\n"
+        "2024-02-15,sell,VWCE,IE00BK5BQT80,etf,10,150.00,0.00\n"
+    )
+
+    result = csv_ingestor.ingest_csv(db, portfolio, csv)
+    vwce = next(p for p in portfolio.positions if p.ticker == "VWCE")
+
+    assert vwce.quantity == Decimal("0.00000000")
+    assert any("CLAMPED" in w for w in result.warnings)
+
+
+def test_dividend_does_not_change_holdings(db: Session) -> None:
+    portfolio = _seed_user_and_portfolio(db)
+    csv = (
+        "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur\n"
+        "2024-01-15,buy,VWCE,IE00BK5BQT80,etf,10,100.00,0.00\n"
+        "2024-03-01,dividend,VWCE,IE00BK5BQT80,etf,,,0.00\n"
+    )
+
+    result = csv_ingestor.ingest_csv(db, portfolio, csv)
+    vwce = next(p for p in portfolio.positions if p.ticker == "VWCE")
+
+    assert vwce.quantity == Decimal("10.00000000")
+    assert vwce.avg_cost_eur == Decimal("100.0000")
+    assert result.lots_created == 1
+    assert any("dividend" in w for w in result.warnings)
+
+
+def test_split_with_ratio_scales_qty_and_avg(db: Session) -> None:
+    portfolio = _seed_user_and_portfolio(db)
+    csv = (
+        "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur,split_ratio\n"
+        "2024-01-15,buy,AAPL,US0378331005,stock,10,100.00,0.00,\n"
+        "2024-06-01,split,AAPL,US0378331005,stock,,,0.00,4\n"
+    )
+
+    result = csv_ingestor.ingest_csv(db, portfolio, csv)
+    aapl = next(p for p in portfolio.positions if p.ticker == "AAPL")
+
+    # 4-for-1 split: 10 → 40 shares, basis preserved so avg 100 → 25.
+    assert aapl.quantity == Decimal("40.00000000")
+    assert aapl.avg_cost_eur == Decimal("25.0000")
+    assert any("split" in w for w in result.warnings)
+
+
+def test_split_without_ratio_is_flagged_not_applied(db: Session) -> None:
+    portfolio = _seed_user_and_portfolio(db)
+    csv = (
+        "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur\n"
+        "2024-01-15,buy,AAPL,US0378331005,stock,10,100.00,0.00\n"
+        "2024-06-01,split,AAPL,US0378331005,stock,,,0.00\n"
+    )
+
+    result = csv_ingestor.ingest_csv(db, portfolio, csv)
+    aapl = next(p for p in portfolio.positions if p.ticker == "AAPL")
+
+    assert aapl.quantity == Decimal("10.00000000")  # unchanged — not guessed
+    assert any("SPLIT_FLAGGED" in w for w in result.warnings)

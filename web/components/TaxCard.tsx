@@ -1,4 +1,4 @@
-import type { TaxSummaryResponse } from "@/lib/types";
+import type { CryptoHoldingPeriodView, TaxSummaryResponse } from "@/lib/types";
 import { formatDual, formatEur, formatPct } from "@/lib/format";
 
 interface TaxCardProps {
@@ -70,6 +70,21 @@ export function TaxCard({ tax }: TaxCardProps) {
         </div>
       ) : null}
 
+      {tax.crypto_holding_periods.length > 0 ? (
+        <div className="mt-5 space-y-2">
+          <p className="label">Crypto holding period</p>
+          <ul className="space-y-2">
+            {tax.crypto_holding_periods.map((h, idx) => (
+              <CryptoClock
+                key={`${h.ticker}-${idx}`}
+                holding={h}
+                afterDays={tax.crypto_tax_free_after_days}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {tax.notes.length > 0 ? (
         <ul className="mt-4 space-y-1 text-xs text-ink-subtle">
           {tax.notes.map((note, idx) => (
@@ -80,6 +95,39 @@ export function TaxCard({ tax }: TaxCardProps) {
 
       <p className="mt-4 text-xs italic text-ink-subtle">{tax.disclaimer}</p>
     </article>
+  );
+}
+
+function CryptoClock({
+  holding,
+  afterDays,
+}: {
+  holding: CryptoHoldingPeriodView;
+  afterDays: number | null;
+}) {
+  const denom = afterDays ?? 365;
+  const pct = Math.min(100, Math.round((holding.days_held / denom) * 100));
+  return (
+    <li className="rounded-md border border-rule bg-surface-2/40 p-3">
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="text-sm font-medium text-ink">{holding.ticker}</span>
+        {holding.tax_free ? (
+          <span className="inline-flex items-center rounded-md border border-positive/30 bg-positive-subtle/40 px-2 py-0.5 text-xs font-medium text-positive">
+            Past the {denom}-day mark
+          </span>
+        ) : (
+          <span className="font-mono text-xs text-ink-muted">
+            {holding.days_to_tax_free} days to go
+          </span>
+        )}
+      </div>
+      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+        <div className="h-full rounded-full bg-positive" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-1.5 text-xs text-ink-subtle">
+        Acquired {holding.acquired_on} · {holding.days_held} days held
+      </p>
+    </li>
   );
 }
 

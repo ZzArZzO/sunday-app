@@ -1,10 +1,11 @@
+from datetime import datetime, timezone
 from decimal import Decimal
 
 from fastapi import APIRouter, Depends
 
 from app.deps import get_current_user, get_default_portfolio
 from app.models import Portfolio, User
-from app.schemas.tax import TaxBracket, TaxSummaryResponse
+from app.schemas.tax import CryptoHoldingPeriodView, TaxBracket, TaxSummaryResponse
 from app.services import dividend_projector, fx, pnl, tax_summary
 
 router = APIRouter(prefix="/api/tax", tags=["tax"])
@@ -64,6 +65,31 @@ def get_tax_summary(
     if unrealised_gains <= 0:
         notes.append("No taxable gains today — portfolio is at or below cost basis.")
 
+    # Crypto holding-period clock (DE/PT 365-day rule) — informational only.
+    holding_views: list[CryptoHoldingPeriodView] = []
+    if profile.crypto_tax_free_after_days is not None:
+        periods = tax_summary.crypto_holding_periods(
+            positions,
+            now=datetime.now(timezone.utc),
+            holding_period_days=profile.crypto_tax_free_after_days,
+        )
+        holding_views = [
+            CryptoHoldingPeriodView(
+                ticker=h.ticker,
+                quantity=h.quantity,
+                acquired_on=h.acquired_on.isoformat(),
+                days_held=h.days_held,
+                days_to_tax_free=h.days_to_tax_free,
+                tax_free=h.tax_free,
+            )
+            for h in periods
+        ]
+        if holding_views:
+            notes.append(
+                f"In {profile.name}, privately-held crypto is generally tax-free after "
+                f"{profile.crypto_tax_free_after_days} days. The dates below are informational, not advice."
+            )
+
     return TaxSummaryResponse(
         country=profile.code,
         country_name=profile.name,
@@ -78,5 +104,7 @@ def get_tax_summary(
         after_tax_value_if_realised=fx.dual(tax_calc.after_tax_value_eur, quote.rate),
         annual_dividend_estimate=fx.dual(annual_dividend, quote.rate),
         estimated_dividend_tax=fx.dual(dividend_tax, quote.rate),
+        crypto_tax_free_after_days=profile.crypto_tax_free_after_days,
+        crypto_holding_periods=holding_views,
         notes=notes,
     )

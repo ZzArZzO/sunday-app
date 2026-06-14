@@ -18,3 +18,8 @@ class Portfolio(Base):
     positions: Mapped[list["Position"]] = relationship(  # noqa: F821
         back_populates="portfolio", cascade="all, delete-orphan"
     )
+    snapshots: Mapped[list["PortfolioSnapshot"]] = relationship(  # noqa: F821
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+        order_by="PortfolioSnapshot.as_of",
+    )

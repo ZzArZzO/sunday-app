@@ -24,6 +24,7 @@ from app.services import (
     fx,
     pnl,
     rebalancer,
+    snapshots,
     tax_summary,
 )
 
@@ -37,12 +38,20 @@ def _format_pct(pct: Decimal) -> str:
     return f"{sign}{pct:.2f}%"
 
 
-def _build_headline(net_worth_eur: Decimal, wow_delta_eur: Decimal, wow_pct: Decimal) -> BriefingSection:
-    body = (
-        f"Net worth: **{_format_eur(net_worth_eur)}**.\n\n"
-        f"Week over week: **{_format_pct(wow_pct)}** "
-        f"({_format_eur(wow_delta_eur)})."
-    )
+def _build_headline(net_worth_eur: Decimal, wow: snapshots.WowResult) -> BriefingSection:
+    if wow.available:
+        since = f" — since {wow.baseline_on.isoformat()}" if wow.baseline_on else ""
+        body = (
+            f"Net worth: **{_format_eur(net_worth_eur)}**.\n\n"
+            f"Week over week: **{_format_pct(wow.pct)}** "
+            f"({_format_eur(wow.delta_eur)}){since}."
+        )
+    else:
+        body = (
+            f"Net worth: **{_format_eur(net_worth_eur)}**.\n\n"
+            "Week-over-week will appear once there's a prior week's snapshot to "
+            "compare against — your history is still building."
+        )
     return BriefingSection(kind="headline", title="The number that matters", body_markdown=body)
 
 
@@ -165,8 +174,8 @@ def compose_briefing(portfolio: Portfolio) -> BriefingResponse:
         (pnl.cost_basis_eur(p) for p in positions), start=Decimal("0")
     )
 
-    wow_delta_eur = Decimal("0")
-    wow_pct = Decimal("0")
+    now = datetime.now(timezone.utc)
+    wow = snapshots.week_over_week(list(portfolio.snapshots), total_value_eur, now)
 
     items = concentration.detect_concentration(positions, total_value_eur)
 
@@ -220,7 +229,7 @@ def compose_briefing(portfolio: Portfolio) -> BriefingResponse:
     )
 
     sections: list[BriefingSection] = [
-        _build_headline(total_value_eur, wow_delta_eur, wow_pct),
+        _build_headline(total_value_eur, wow),
         _build_what_changed_placeholder(),
         _build_fire_section(fire_calc),
         _build_concentration_section(items),
@@ -238,8 +247,13 @@ def compose_briefing(portfolio: Portfolio) -> BriefingResponse:
         generated_at=datetime.now(timezone.utc).isoformat(),
         fx_eur_usd=quote.rate,
         net_worth=fx.dual(total_value_eur, quote.rate),
-        wow_delta=fx.dual(wow_delta_eur, quote.rate),
-        wow_delta_pct=wow_pct,
+        wow_delta=fx.dual(wow.delta_eur, quote.rate),
+        wow_delta_pct=wow.pct,
+        wow_available=wow.available,
+        wow_baseline_date=wow.baseline_on.isoformat() if wow.baseline_on else None,
         sections=sections,
         concentration_alerts=items,
+        # The "Generated with AI assistance" line is added by briefing_ai.enhance
+        # only when the AI narrative actually runs — keeps the disclaimer honest.
+        disclaimers=["Not investment advice. Information only."],
     )

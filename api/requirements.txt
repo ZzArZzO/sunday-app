@@ -18,6 +18,11 @@ pydantic-settings>=2.6,<3
 # --- Utilities ---
 python-dateutil>=2.9
 
+# --- Market data (live prices + FX) ---
+# curl_cffi impersonates Chrome's TLS so Yahoo's WAF doesn't 429 (seed pattern).
+yfinance>=0.2.66,<0.3
+curl_cffi>=0.7
+
 # --- AI (not used in the slice yet) ---
 anthropic>=0.40,<1
 

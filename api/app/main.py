@@ -3,13 +3,18 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.routes import (
+    benchmark,
     briefing,
+    chat,
     dividend,
+    events,
     fire,
     health,
     ingest,
     portfolio,
+    prices,
     rebalance,
+    snapshots,
     tax,
 )
 
@@ -40,3 +45,8 @@ app.include_router(fire.router)
 app.include_router(dividend.router)
 app.include_router(tax.router)
 app.include_router(rebalance.router)
+app.include_router(chat.router)
+app.include_router(prices.router)
+app.include_router(snapshots.router)
+app.include_router(events.router)
+app.include_router(benchmark.router)

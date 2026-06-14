@@ -15,10 +15,13 @@
   --accent: 217 119 6;
   --accent-fg: 255 255 255;
   --accent-subtle: 254 243 199;
-  --positive: 21 128 61;
-  --positive-subtle: 220 252 231;
-  --negative: 185 28 28;
-  --negative-subtle: 254 226 226;
+  /* Gains/losses use a colour-blind-safe blue/orange pair (not green/red),
+     differing in hue AND lightness. Always paired with a sign/arrow in the UI
+     so colour is never the only signal. */
+  --positive: 37 99 235;
+  --positive-subtle: 219 234 254;
+  --negative: 194 65 12;
+  --negative-subtle: 255 237 213;
   --warn: 161 98 7;
   --warn-subtle: 254 243 199;
   --shadow: 24 24 27;
@@ -39,10 +42,11 @@
   --accent: 245 158 11;
   --accent-fg: 17 17 20;
   --accent-subtle: 69 26 3;
-  --positive: 74 222 128;
-  --positive-subtle: 6 47 22;
-  --negative: 248 113 113;
-  --negative-subtle: 60 16 16;
+  /* Colour-blind-safe blue/orange, lifted for contrast on dark surfaces. */
+  --positive: 96 165 250;
+  --positive-subtle: 23 37 84;
+  --negative: 251 146 60;
+  --negative-subtle: 67 20 7;
   --warn: 250 204 21;
   --warn-subtle: 56 32 4;
   --shadow: 0 0 0;

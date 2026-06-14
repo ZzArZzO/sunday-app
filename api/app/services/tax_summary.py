@@ -9,6 +9,7 @@ informational floor: "rough order of magnitude of what you'd owe if you sold tod
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from decimal import Decimal
 
 
@@ -29,6 +30,9 @@ class CountryTaxProfile:
     brackets: list[TaxBracketSpec] = field(default_factory=list)
     # German Teilfreistellung: 30% of equity-ETF gains are exempt.
     equity_etf_partial_exemption_pct: Decimal = Decimal("0")
+    # Days a privately-held crypto position must be held to become tax-free
+    # (DE §23 EStG and PT both use 365). None where no such rule applies.
+    crypto_tax_free_after_days: int | None = None
 
 
 # Sources:
@@ -58,6 +62,7 @@ COUNTRY_PROFILES: dict[str, CountryTaxProfile] = {
             ),
         ],
         equity_etf_partial_exemption_pct=Decimal("30"),
+        crypto_tax_free_after_days=365,
     ),
     "FR": CountryTaxProfile(
         code="FR",
@@ -153,6 +158,7 @@ COUNTRY_PROFILES: dict[str, CountryTaxProfile] = {
                 applies_to="Short-term capital gains, top bracket",
             ),
         ],
+        crypto_tax_free_after_days=365,
     ),
 }
 
@@ -216,3 +222,48 @@ def estimate_dividend_tax(profile: CountryTaxProfile, annual_dividend_eur: Decim
     return (annual_dividend_eur * profile.dividend_rate_pct / Decimal("100")).quantize(
         Decimal("0.01")
     )
+
+
+@dataclass(frozen=True)
+class CryptoHoldingPeriod:
+    """One crypto lot's progress toward the tax-free holding mark. Informational."""
+
+    ticker: str
+    quantity: Decimal
+    acquired_on: date
+    days_held: int
+    days_to_tax_free: int  # 0 once the holding period is met
+    tax_free: bool
+
+
+def crypto_holding_periods(
+    positions: list,
+    *,
+    now: datetime,
+    holding_period_days: int,
+) -> list[CryptoHoldingPeriod]:
+    """Per-lot crypto holding-period clock. Pure; sorted soonest-to-tax-free first.
+
+    Purely descriptive — it states where each lot is against the statutory mark.
+    It never suggests holding or selling (that would cross into advice).
+    """
+    out: list[CryptoHoldingPeriod] = []
+    for p in positions:
+        if getattr(p, "asset_class", None) != "crypto":
+            continue
+        for lot in getattr(p, "lots", []):
+            acquired = lot.purchased_at.date()
+            days_held = (now.date() - acquired).days
+            remaining = max(0, holding_period_days - days_held)
+            out.append(
+                CryptoHoldingPeriod(
+                    ticker=p.ticker,
+                    quantity=lot.quantity,
+                    acquired_on=acquired,
+                    days_held=days_held,
+                    days_to_tax_free=remaining,
+                    tax_free=remaining == 0,
+                )
+            )
+    # Lots still on the clock first (soonest to free), then already-free lots.
+    return sorted(out, key=lambda h: (h.tax_free, h.days_to_tax_free))

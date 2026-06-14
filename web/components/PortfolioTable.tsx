@@ -1,4 +1,5 @@
 import type { PositionView } from "@/lib/types";
+import { TrendArrow } from "@/components/TrendArrow";
 import { formatDual, formatPct, formatQuantity } from "@/lib/format";
 
 const ASSET_CLASS_LABEL: Record<string, string> = {
@@ -69,8 +70,13 @@ export function PortfolioTable({ positions }: { positions: PositionView[] }) {
                     {formatDual(p.market_value)}
                   </Td>
                   <Td align="right" mono className={pnlClass}>
-                    {pnl > 0 ? "+" : ""}
-                    {formatDual(p.unrealised_pnl)}
+                    <span className="inline-flex items-center justify-end gap-1">
+                      <TrendArrow value={pnl} />
+                      <span>
+                        {pnl > 0 ? "+" : ""}
+                        {formatDual(p.unrealised_pnl)}
+                      </span>
+                    </span>
                   </Td>
                   <Td align="right" mono>
                     {formatPct(p.weight_pct)}

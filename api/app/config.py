@@ -12,6 +12,13 @@ class Settings(BaseSettings):
 
     anthropic_api_key: str = ""
     anthropic_region: str = "eu"
+    # Optional override for EU data-residency endpoint (see docs/LEGAL.md).
+    anthropic_base_url: str = ""
+    # Two-tier model split (docs/ARCHITECTURE.md). Chat uses Sonnet; the cheap
+    # guardrail/summarisation tier uses Haiku.
+    anthropic_chat_model: str = "claude-sonnet-4-6"
+    anthropic_guard_model: str = "claude-haiku-4-5"
+    chat_max_tokens: int = 1024
     fmp_api_key: str = ""
 
     demo_user_id: int = 1

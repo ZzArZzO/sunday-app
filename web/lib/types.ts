@@ -56,6 +56,8 @@ export type BriefingResponse = {
   net_worth: DualMoney;
   wow_delta: DualMoney;
   wow_delta_pct: string;
+  wow_available: boolean;
+  wow_baseline_date: string | null;
   sections: BriefingSection[];
   concentration_alerts: ConcentrationItem[];
   disclaimers: string[];
@@ -66,6 +68,34 @@ export type IngestResult = {
   positions_created: number;
   positions_updated: number;
   lots_created: number;
+  warnings: string[];
+};
+
+export type PreviewColumnView = {
+  source: string;
+  mapped_to: string;
+  confidence: string;
+  sample: string | null;
+};
+
+export type PreviewRowView = {
+  line: number;
+  status: "ok" | "skipped";
+  reason: string | null;
+  date: string | null;
+  kind: string | null;
+  ticker: string | null;
+  quantity: string | null;
+  unit_price_eur: string | null;
+};
+
+export type IngestPreviewResponse = {
+  detected_format: string;
+  columns: PreviewColumnView[];
+  unmapped_headers: string[];
+  rows: PreviewRowView[];
+  ok_count: number;
+  skipped_count: number;
   warnings: string[];
 };
 
@@ -126,6 +156,15 @@ export type TaxBracket = {
   applies_to: string;
 };
 
+export type CryptoHoldingPeriodView = {
+  ticker: string;
+  quantity: string;
+  acquired_on: string;
+  days_held: number;
+  days_to_tax_free: number;
+  tax_free: boolean;
+};
+
 export type TaxSummaryResponse = {
   country: string;
   country_name: string;
@@ -137,6 +176,8 @@ export type TaxSummaryResponse = {
   after_tax_value_if_realised: DualMoney;
   annual_dividend_estimate: DualMoney;
   estimated_dividend_tax: DualMoney;
+  crypto_tax_free_after_days: number | null;
+  crypto_holding_periods: CryptoHoldingPeriodView[];
   notes: string[];
   disclaimer: string;
 };
@@ -161,4 +202,66 @@ export type RebalanceResponse = {
   legs: RebalanceLeg[];
   method: string;
   notes: string[];
+};
+
+// --- Benchmark -----------------------------------------------------------
+
+export type BenchmarkPoint = {
+  on: string;
+  portfolio_twr_pct: string;
+  index_twr_pct: string | null;
+};
+
+export type BenchmarkResponse = {
+  available: boolean;
+  index_key: string;
+  index_name: string;
+  index_available: boolean;
+  series: BenchmarkPoint[];
+  portfolio_pct: string | null;
+  index_pct: string | null;
+  diff_pct: string | null;
+  diff: DualMoney | null;
+  note: string | null;
+  disclaimer: string;
+};
+
+// --- Prices --------------------------------------------------------------
+
+export type PriceRefreshResponse = {
+  priced: number;
+  unpriced: number;
+  total: number;
+  eur_usd_rate: string;
+  eur_usd_source: string;
+  refreshed_at: string;
+  warnings: string[];
+};
+
+// --- Chat / AI assistant -------------------------------------------------
+
+export type ChatRole = "user" | "assistant";
+
+export type ChatMessage = {
+  role: ChatRole;
+  content: string;
+};
+
+export type ChatGroundingHolding = {
+  ticker: string;
+  weight_pct: string;
+};
+
+export type ChatGrounding = {
+  as_of: string | null;
+  holdings: ChatGroundingHolding[];
+  facts: string[];
+};
+
+export type ChatResponse = {
+  reply: string;
+  model: string;
+  guardrail_triggered: boolean;
+  grounding: ChatGrounding | null;
+  disclaimers: string[];
 };

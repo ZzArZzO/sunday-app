@@ -1,10 +1,16 @@
+import { AllocationBar } from "@/components/AllocationBar";
+import { AllocationTreemap } from "@/components/AllocationTreemap";
+import { BenchmarkChart } from "@/components/BenchmarkChart";
 import { ConcentrationCard } from "@/components/ConcentrationCard";
+import { DataQualityNote } from "@/components/DataQualityNote";
 import { Disclaimer } from "@/components/Disclaimer";
 import { DividendCard } from "@/components/DividendCard";
 import { FireCard } from "@/components/FireCard";
 import { PortfolioTable } from "@/components/PortfolioTable";
 import { RebalanceCard } from "@/components/RebalanceCard";
+import { RefreshPricesButton } from "@/components/RefreshPricesButton";
 import { TaxCard } from "@/components/TaxCard";
+import { TrendArrow } from "@/components/TrendArrow";
 import {
   fetchDividend,
   fetchFire,
@@ -12,16 +18,9 @@ import {
   fetchRebalance,
   fetchTax,
 } from "@/lib/api";
-import { formatDual, formatPct } from "@/lib/format";
+import { formatDual } from "@/lib/format";
 
 export const dynamic = "force-dynamic";
-
-const ASSET_CLASS_LABEL: Record<string, string> = {
-  stock: "Stocks",
-  etf: "ETFs",
-  crypto: "Crypto",
-  cash: "Cash",
-};
 
 export default async function DashboardPage() {
   let portfolio;
@@ -56,6 +55,7 @@ export default async function DashboardPage() {
   const pnlClass =
     pnl > 0 ? "text-positive" : pnl < 0 ? "text-negative" : "text-ink-muted";
   const pnlSign = pnl > 0 ? "+" : "";
+  const pricedCount = portfolio.positions.filter((p) => p.last_price_eur !== null).length;
 
   return (
     <div className="space-y-10 fade-up sm:space-y-12">
@@ -70,22 +70,26 @@ export default async function DashboardPage() {
             label="Unrealised"
             value={`${pnlSign}${formatDual(portfolio.total_pnl)}`}
             valueClass={pnlClass}
+            trend={pnl}
           />
-          <Stat label="EUR/USD" value={Number(portfolio.fx_eur_usd).toFixed(4)} />
         </div>
+        <DataQualityNote
+          asOf={portfolio.as_of}
+          priced={pricedCount}
+          total={portfolio.positions.length}
+          fxEurUsd={portfolio.fx_eur_usd}
+        />
+        <RefreshPricesButton />
       </header>
 
       <section className="space-y-4">
         <p className="label">By asset class</p>
-        <ul className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {Object.entries(portfolio.asset_class_split).map(([cls, pct]) => (
-            <li key={cls} className="card p-4">
-              <p className="label">{ASSET_CLASS_LABEL[cls] ?? cls}</p>
-              <p className="mt-1 font-mono text-2xl tabular-nums text-ink">{formatPct(pct)}</p>
-            </li>
-          ))}
-        </ul>
+        <div className="card p-5">
+          <AllocationBar split={portfolio.asset_class_split} />
+        </div>
       </section>
+
+      <BenchmarkChart />
 
       <section className="grid gap-4 lg:grid-cols-2">
         <FireCard fire={fire} />
@@ -103,12 +107,24 @@ export default async function DashboardPage() {
       </section>
 
       <section className="space-y-4">
+        <div className="flex items-baseline justify-between gap-4">
+          <p className="label">Holdings map</p>
+          <p className="text-xs text-ink-subtle">
+            Tile size = value · colour = gain/loss
+          </p>
+        </div>
+        <div className="card p-5">
+          <AllocationTreemap positions={portfolio.positions} />
+        </div>
+      </section>
+
+      <section className="space-y-4">
         <p className="label">Positions</p>
         <PortfolioTable positions={portfolio.positions} />
       </section>
 
       <Disclaimer
-        extra={`Prices on the demo portfolio are placeholder values. As of ${new Date(
+        extra={`Use "Refresh prices" for live values; unpriced holdings fall back to cost basis. As of ${new Date(
           portfolio.as_of,
         ).toLocaleString()}.`}
       />
@@ -120,15 +136,20 @@ function Stat({
   label,
   value,
   valueClass = "",
+  trend,
 }: {
   label: string;
   value: string;
   valueClass?: string;
+  trend?: number;
 }) {
   return (
     <span className="inline-flex items-baseline gap-2">
       <span className="text-ink-subtle">{label}</span>
-      <span className={`font-mono tabular-nums ${valueClass || "text-ink"}`}>{value}</span>
+      <span className={`inline-flex items-center gap-1 font-mono tabular-nums ${valueClass || "text-ink"}`}>
+        {trend !== undefined ? <TrendArrow value={trend} className={valueClass} /> : null}
+        {value}
+      </span>
     </span>
   );
 }

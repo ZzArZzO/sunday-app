@@ -25,6 +25,10 @@ class BriefingResponse(BaseModel):
     net_worth: DualMoney
     wow_delta: DualMoney
     wow_delta_pct: Decimal
+    # False until a prior week's snapshot exists — so the UI shows "building
+    # history" rather than a misleading +0.00%.
+    wow_available: bool = True
+    wow_baseline_date: str | None = None
     sections: list[BriefingSection]
     concentration_alerts: list[ConcentrationItem]
     disclaimers: list[str] = Field(

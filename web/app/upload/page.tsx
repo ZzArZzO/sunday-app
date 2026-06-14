@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { CsvUploader } from "@/components/CsvUploader";
 import { Disclaimer } from "@/components/Disclaimer";
 
@@ -12,6 +14,12 @@ export default function UploadPage() {
         <p className="max-w-prose text-base leading-relaxed text-ink-muted">
           Export your position history from your broker as CSV and drop it in. The file is parsed
           in place. We keep tickers, quantities, dates, and cost basis — nothing else.
+        </p>
+        <p className="text-sm text-ink-muted">
+          Want to look around first?{" "}
+          <Link href="/dashboard" className="font-medium text-accent hover:underline">
+            Explore a sample portfolio →
+          </Link>
         </p>
       </header>
 

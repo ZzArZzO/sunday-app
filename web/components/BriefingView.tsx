@@ -1,7 +1,16 @@
 import type { BriefingResponse, BriefingSection } from "@/lib/types";
 import { ConcentrationCard } from "@/components/ConcentrationCard";
 import { Disclaimer } from "@/components/Disclaimer";
+import { Sparkline } from "@/components/Sparkline";
 import { formatDual, formatPct } from "@/lib/format";
+
+/** Safely pull a numeric `spark` series out of a section's loosely-typed data. */
+function sparkSeries(data: Record<string, unknown> | null): number[] | null {
+  const raw = data?.spark;
+  if (!Array.isArray(raw)) return null;
+  const nums = raw.filter((v): v is number => typeof v === "number");
+  return nums.length >= 2 ? nums : null;
+}
 
 /**
  * Modern briefing layout: dateline header, oversized net-worth hero, narrative
@@ -30,18 +39,30 @@ export function BriefingView({ briefing }: { briefing: BriefingResponse }) {
           {formatDual(briefing.net_worth)}
         </p>
         <p className="mt-4 flex flex-wrap items-center gap-x-3 gap-y-1 text-base text-ink-muted">
-          <span className="inline-flex items-center gap-1.5">
-            <TrendIcon up={wow > 0} flat={wow === 0} className={wowClass} />
-            <span className={`font-mono tabular-nums ${wowClass}`}>
-              {wowSign}
-              {formatPct(briefing.wow_delta_pct)}
-            </span>
-          </span>
-          <span className="text-ink-subtle">·</span>
-          <span className={`font-mono tabular-nums ${wowClass}`}>
-            {wowSign}
-            {formatDual(briefing.wow_delta)}
-          </span>
+          {briefing.wow_available ? (
+            <>
+              <span className="inline-flex items-center gap-1.5">
+                <TrendIcon up={wow > 0} flat={wow === 0} className={wowClass} />
+                <span className={`font-mono tabular-nums ${wowClass}`}>
+                  {wowSign}
+                  {formatPct(briefing.wow_delta_pct)}
+                </span>
+              </span>
+              <span className="text-ink-subtle">·</span>
+              <span className={`font-mono tabular-nums ${wowClass}`}>
+                {wowSign}
+                {formatDual(briefing.wow_delta)}
+              </span>
+              {briefing.wow_baseline_date ? (
+                <>
+                  <span className="text-ink-subtle">·</span>
+                  <span className="text-ink-subtle">since {briefing.wow_baseline_date}</span>
+                </>
+              ) : null}
+            </>
+          ) : (
+            <span className="text-ink-subtle">Week-over-week starts once your history builds</span>
+          )}
           <span className="text-ink-subtle">·</span>
           <span className="text-ink-subtle">
             EUR/USD <span className="font-mono">{Number(briefing.fx_eur_usd).toFixed(4)}</span>
@@ -79,12 +100,16 @@ export function BriefingView({ briefing }: { briefing: BriefingResponse }) {
 }
 
 function SectionBlock({ section }: { section: BriefingSection }) {
+  const spark = sparkSeries(section.data);
   return (
     <section className="space-y-3">
       <p className="label">{kindLabel(section.kind)}</p>
-      <h2 className="font-sans text-2xl font-semibold tracking-tight text-ink">
-        {section.title}
-      </h2>
+      <div className="flex items-start justify-between gap-4">
+        <h2 className="font-sans text-2xl font-semibold tracking-tight text-ink">
+          {section.title}
+        </h2>
+        {spark ? <Sparkline values={spark} className="mt-1 flex-none" /> : null}
+      </div>
       <div className="max-w-prose whitespace-pre-line text-base leading-relaxed text-ink-muted">
         {section.body_markdown}
       </div>
