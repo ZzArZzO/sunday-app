@@ -1,5 +1,7 @@
+import { BriefingActions } from "@/components/BriefingActions";
 import { BriefingView } from "@/components/BriefingView";
 import { EventsCard } from "@/components/EventsCard";
+import { WeeklyOptInToggle } from "@/components/WeeklyOptInToggle";
 import { fetchBriefing } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -22,6 +24,10 @@ export default async function BriefingPage() {
   return (
     <div className="container-prose -mx-6 space-y-12 sm:mx-0">
       <BriefingView briefing={briefing} />
+      <div className="space-y-3">
+        <BriefingActions />
+        <WeeklyOptInToggle />
+      </div>
       <EventsCard />
     </div>
   );

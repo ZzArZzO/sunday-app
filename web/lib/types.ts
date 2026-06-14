@@ -290,3 +290,17 @@ export type ChatResponse = {
   grounding: ChatGrounding | null;
   disclaimers: string[];
 };
+
+// Delivery — mirrors api/app/schemas/delivery.py DeliveryResultView.
+export type DeliveryResult = {
+  email: string;
+  ok: boolean;
+  dry_run: boolean;
+  subject: string | null;
+  message_id: string | null;
+  error: string | null;
+};
+
+export type DeliveryPreferences = {
+  weekly_opt_in: boolean;
+};

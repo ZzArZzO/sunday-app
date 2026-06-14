@@ -4,6 +4,8 @@ import type {
   ChatGrounding,
   ChatMessage,
   ChatResponse,
+  DeliveryPreferences,
+  DeliveryResult,
   DividendResponse,
   EventsResponse,
   FireResponse,
@@ -23,14 +25,28 @@ function getApiUrl(): string {
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${getApiUrl()}${path}`, {
-    ...init,
-    cache: "no-store",
-    headers: {
-      Accept: "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  const headers: Record<string, string> = {
+    Accept: "application/json",
+    ...((init?.headers as Record<string, string> | undefined) ?? {}),
+  };
+  const fetchInit: RequestInit = { ...init, cache: "no-store", headers };
+
+  if (typeof window === "undefined") {
+    // Server component: forward the caller's session cookie to the API so the
+    // request is scoped to the logged-in user (not the demo fallback).
+    try {
+      const { cookies } = await import("next/headers");
+      const cookieHeader = cookies().toString();
+      if (cookieHeader) headers["Cookie"] = cookieHeader;
+    } catch {
+      // Not inside a request scope (e.g. at build time) — skip.
+    }
+  } else {
+    // Browser: include the cross-origin session cookie.
+    fetchInit.credentials = "include";
+  }
+
+  const res = await fetch(`${getApiUrl()}${path}`, fetchInit);
   if (!res.ok) {
     const detail = await res.text();
     throw new Error(`API ${res.status} ${path}: ${detail}`);
@@ -44,6 +60,44 @@ export async function fetchPortfolio(): Promise<PortfolioResponse> {
 
 export async function fetchBriefing(): Promise<BriefingResponse> {
   return http<BriefingResponse>("/api/briefing");
+}
+
+/** Email the signed-in user this week's briefing now (dry-run without a Resend key). */
+export async function sendMyBriefing(): Promise<DeliveryResult> {
+  return http<DeliveryResult>("/api/delivery/briefing", { method: "POST" });
+}
+
+/** Read the signed-in user's weekly-email opt-in preference. */
+export async function fetchDeliveryPreferences(): Promise<DeliveryPreferences> {
+  return http<DeliveryPreferences>("/api/delivery/preferences");
+}
+
+/** Set the signed-in user's weekly-email opt-in preference. */
+export async function updateDeliveryPreferences(
+  weeklyOptIn: boolean,
+): Promise<DeliveryPreferences> {
+  return http<DeliveryPreferences>("/api/delivery/preferences", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ weekly_opt_in: weeklyOptIn }),
+  });
+}
+
+/**
+ * Fetch the one-page briefing PDF as a Blob. Browser-only — uses credentials so
+ * the download is scoped to the signed-in user's portfolio (not the demo fallback).
+ */
+export async function fetchBriefingPdf(): Promise<Blob> {
+  const res = await fetch(`${getApiUrl()}/api/briefing/pdf`, {
+    cache: "no-store",
+    credentials: "include",
+    headers: { Accept: "application/pdf" },
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API ${res.status} /api/briefing/pdf: ${detail}`);
+  }
+  return res.blob();
 }
 
 export async function fetchFire(): Promise<FireResponse> {
@@ -100,6 +154,7 @@ export async function sendChatStream(
   const res = await fetch(`${getApiUrl()}/api/chat/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    credentials: "include",
     body: JSON.stringify({ messages }),
   });
   if (!res.ok || !res.body) {
