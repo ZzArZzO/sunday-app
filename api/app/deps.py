@@ -20,8 +20,9 @@ def get_current_user(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> User:
-    # Real auth: resolve the session cookie to a user.
-    token = request.cookies.get(auth_tokens.SESSION_COOKIE)
+    # Real auth: resolve the session token (Bearer header for mobile, else the
+    # web cookie) to a user.
+    token = auth_tokens.session_token_from_request(request)
     if token:
         user = auth_tokens.lookup_session(db, token)
         if user is not None:

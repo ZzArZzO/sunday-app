@@ -90,6 +90,21 @@ def lookup_session(db: Session, token: str, *, now: datetime | None = None) -> U
     return db.get(User, row.user_id)
 
 
+def session_token_from_request(request) -> str | None:
+    """Extract the session token from a request.
+
+    `Authorization: Bearer <token>` (mobile / Capacitor) takes precedence; the
+    session cookie (web) is the fallback. Duck-typed so it works with both a real
+    Starlette Request and a lightweight test stand-in.
+    """
+    header = request.headers.get("Authorization")
+    if header and header[:7].lower() == "bearer ":
+        candidate = header[7:].strip()
+        if candidate:
+            return candidate
+    return request.cookies.get(SESSION_COOKIE)
+
+
 def revoke_session(db: Session, token: str) -> None:
     if not token:
         return

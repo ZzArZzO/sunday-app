@@ -16,3 +16,15 @@ class MeResponse(BaseModel):
     authenticated: bool
     email: str | None = None
     country: str | None = None
+
+
+class ExchangeRequest(BaseModel):
+    """Mobile sign-in: trade a magic-link token for a session token (JSON, no cookie)."""
+
+    magic_token: str
+
+
+class ExchangeResponse(BaseModel):
+    session_token: str
+    email: str | None = None
+    country: str | None = None

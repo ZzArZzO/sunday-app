@@ -69,3 +69,72 @@ class TestSession:
 
     def test_empty_token(self, db: Session):
         assert auth_tokens.lookup_session(db, "", now=NOW) is None
+
+
+class _FakeReq:
+    def __init__(self, headers: dict | None = None, cookies: dict | None = None):
+        self.headers = headers or {}
+        self.cookies = cookies or {}
+
+
+class TestSessionTokenFromRequest:
+    def test_bearer_header_wins(self):
+        req = _FakeReq(
+            headers={"Authorization": "Bearer abc123"},
+            cookies={auth_tokens.SESSION_COOKIE: "cookieval"},
+        )
+        assert auth_tokens.session_token_from_request(req) == "abc123"
+
+    def test_falls_back_to_cookie(self):
+        req = _FakeReq(cookies={auth_tokens.SESSION_COOKIE: "cookieval"})
+        assert auth_tokens.session_token_from_request(req) == "cookieval"
+
+    def test_none_when_neither(self):
+        assert auth_tokens.session_token_from_request(_FakeReq()) is None
+
+    def test_ignores_non_bearer_scheme(self):
+        req = _FakeReq(headers={"Authorization": "Basic xyz"})
+        assert auth_tokens.session_token_from_request(req) is None
+
+    def test_empty_bearer_is_ignored(self):
+        req = _FakeReq(headers={"Authorization": "Bearer   "})
+        assert auth_tokens.session_token_from_request(req) is None
+
+
+class TestTokenAuthFlow:
+    def test_exchange_returns_resolvable_session_token(self, db: Session):
+        from app.routes.auth import exchange
+        from app.schemas.auth import ExchangeRequest
+
+        user = auth_users.get_or_create_user(db, "m@b.com")
+        magic = auth_tokens.create_magic_token(db, user)
+        db.commit()
+
+        resp = exchange(ExchangeRequest(magic_token=magic), db)
+        assert resp.session_token and resp.email == "m@b.com"
+        # The returned token resolves to the same user.
+        assert auth_tokens.lookup_session(db, resp.session_token).id == user.id
+
+    def test_exchange_rejects_bad_magic_token(self, db: Session):
+        from fastapi import HTTPException
+
+        from app.routes.auth import exchange
+        from app.schemas.auth import ExchangeRequest
+
+        try:
+            exchange(ExchangeRequest(magic_token="garbage"), db)
+            raise AssertionError("expected HTTPException")
+        except HTTPException as exc:
+            assert exc.status_code == 401
+
+    def test_get_current_user_resolves_bearer_token(self, db: Session):
+        from app.config import get_settings
+        from app.deps import get_current_user
+
+        user = auth_users.get_or_create_user(db, "m@b.com")
+        token = auth_tokens.create_session(db, user)
+        db.commit()
+
+        req = _FakeReq(headers={"Authorization": f"Bearer {token}"})
+        got = get_current_user(req, db, get_settings())
+        assert got.id == user.id

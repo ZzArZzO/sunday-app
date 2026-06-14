@@ -19,7 +19,13 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
-from app.schemas.auth import MagicLinkRequest, MagicLinkResponse, MeResponse
+from app.schemas.auth import (
+    ExchangeRequest,
+    ExchangeResponse,
+    MagicLinkRequest,
+    MagicLinkResponse,
+    MeResponse,
+)
 from app.services.auth import tokens as auth_tokens
 from app.services.auth import users as auth_users
 from app.services.delivery import sender
@@ -96,11 +102,27 @@ def verify(
 
 @router.get("/me", response_model=MeResponse)
 def me(request: Request, db: Session = Depends(get_db)) -> MeResponse:
-    token = request.cookies.get(auth_tokens.SESSION_COOKIE)
+    token = auth_tokens.session_token_from_request(request)
     user = auth_tokens.lookup_session(db, token) if token else None
     if user is None:
         return MeResponse(authenticated=False)
     return MeResponse(authenticated=True, email=user.email, country=user.country)
+
+
+@router.post("/exchange", response_model=ExchangeResponse)
+def exchange(body: ExchangeRequest, db: Session = Depends(get_db)) -> ExchangeResponse:
+    """Mobile counterpart to GET /verify: trade a magic token for a session token
+    as JSON (no cookie). The app stores it and sends it as `Authorization: Bearer`."""
+    user = auth_tokens.consume_magic_token(db, body.magic_token)
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired link."
+        )
+    session_token = auth_tokens.create_session(db, user)
+    db.commit()
+    return ExchangeResponse(
+        session_token=session_token, email=user.email, country=user.country
+    )
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
