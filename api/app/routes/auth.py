@@ -127,7 +127,7 @@ def exchange(body: ExchangeRequest, db: Session = Depends(get_db)) -> ExchangeRe
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 def logout(request: Request, db: Session = Depends(get_db)) -> Response:
-    token = request.cookies.get(auth_tokens.SESSION_COOKIE)
+    token = auth_tokens.session_token_from_request(request)
     if token:
         auth_tokens.revoke_session(db, token)
         db.commit()

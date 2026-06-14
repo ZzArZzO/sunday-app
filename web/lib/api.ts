@@ -17,6 +17,7 @@ import type {
   Subscription,
   TaxSummaryResponse,
 } from "@/lib/types";
+import { getAuthToken } from "@/lib/authToken";
 
 function getApiUrl(): string {
   if (typeof window === "undefined") {
@@ -43,8 +44,11 @@ async function http<T>(path: string, init?: RequestInit): Promise<T> {
       // Not inside a request scope (e.g. at build time) — skip.
     }
   } else {
-    // Browser: include the cross-origin session cookie.
+    // Browser: include the cross-origin session cookie (web), and a stored
+    // Bearer token if present (mobile / Capacitor — see lib/authToken).
     fetchInit.credentials = "include";
+    const token = getAuthToken();
+    if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
   const res = await fetch(`${getApiUrl()}${path}`, fetchInit);
@@ -89,10 +93,13 @@ export async function updateDeliveryPreferences(
  * the download is scoped to the signed-in user's portfolio (not the demo fallback).
  */
 export async function fetchBriefingPdf(): Promise<Blob> {
+  const headers: Record<string, string> = { Accept: "application/pdf" };
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${getApiUrl()}/api/briefing/pdf`, {
     cache: "no-store",
     credentials: "include",
-    headers: { Accept: "application/pdf" },
+    headers,
   });
   if (!res.ok) {
     const detail = await res.text();
@@ -167,9 +174,15 @@ export async function sendChatStream(
   messages: ChatMessage[],
   onEvent: (event: ChatStreamEvent) => void,
 ): Promise<void> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    Accept: "text/event-stream",
+  };
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${getApiUrl()}/api/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    headers,
     credentials: "include",
     body: JSON.stringify({ messages }),
   });
