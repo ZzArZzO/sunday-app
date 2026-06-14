@@ -304,3 +304,11 @@ export type DeliveryResult = {
 export type DeliveryPreferences = {
   weekly_opt_in: boolean;
 };
+
+// Billing — mirrors api/app/schemas/billing.py.
+export type Subscription = {
+  tier: "free" | "pro";
+  is_pro: boolean;
+  status: string | null;
+  current_period_end: string | null;
+};

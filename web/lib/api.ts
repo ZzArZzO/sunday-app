@@ -14,6 +14,7 @@ import type {
   PortfolioResponse,
   PriceRefreshResponse,
   RebalanceResponse,
+  Subscription,
   TaxSummaryResponse,
 } from "@/lib/types";
 
@@ -102,6 +103,21 @@ export async function fetchBriefingPdf(): Promise<Blob> {
 
 export async function fetchFire(): Promise<FireResponse> {
   return http<FireResponse>("/api/fire");
+}
+
+/** Current subscription tier/status for the signed-in user. */
+export async function fetchSubscription(): Promise<Subscription> {
+  return http<Subscription>("/api/billing/subscription");
+}
+
+/** Start a Stripe Checkout Session for the Pro plan; returns a redirect URL. */
+export async function startCheckout(): Promise<{ url: string }> {
+  return http<{ url: string }>("/api/billing/checkout", { method: "POST" });
+}
+
+/** Open the Stripe Customer Portal to manage the subscription; returns a URL. */
+export async function openBillingPortal(): Promise<{ url: string }> {
+  return http<{ url: string }>("/api/billing/portal", { method: "POST" });
 }
 
 export async function fetchDividend(): Promise<DividendResponse> {

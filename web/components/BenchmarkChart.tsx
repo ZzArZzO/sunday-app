@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { Group } from "@visx/group";
 import { ParentSize } from "@visx/responsive";
 import { scaleLinear } from "@visx/scale";
@@ -73,9 +74,14 @@ export function BenchmarkChart() {
         ) : data && data.available ? (
           <BenchmarkBody data={data} />
         ) : (
-          <p className="text-sm text-ink-muted">
-            {data?.note ?? "Benchmark comparison isn't available yet."}
-          </p>
+          <div className="space-y-2 text-sm text-ink-muted">
+            <p>{data?.note ?? "Benchmark comparison isn't available yet."}</p>
+            {data?.note?.includes("Pro") ? (
+              <Link href="/billing" className="btn btn-primary inline-flex">
+                Upgrade to Pro
+              </Link>
+            ) : null}
+          </div>
         )}
       </div>
     </section>
