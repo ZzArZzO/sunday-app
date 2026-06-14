@@ -337,6 +337,22 @@ The marketing copy is a *legal surface* (LEGAL.md: "robo-advisor language is the
 - ✅ Disclaimer present on landing page footer, every report, every chat session.
 - The positioning line in B.1 is pre-vetted to stay on the right side of this — anchor all copy to it.
 
+## B.11 AI content tools (Higgsfield et al.) — use sparingly, never for fake UGC
+
+AI ad/video generators (Higgsfield, and the broader Veo/Sora/Kling-aggregator category — €9–84/mo) generate "click-to-ad" videos, cinematic clips, and **AI talking-head UGC/testimonials designed for virality.** Tempting for a solo founder with no creative budget. **Verdict for Sunday: not a core tool; its headline UGC/testimonial feature is off-limits.** Three reasons, all rooted in this product specifically:
+
+1. **Channel mismatch.** Sunday's engine is text-first and organic (newsletter, SEO, Reddit, authentic build-in-public — B.3). Video is ★★★ "slow/expensive" and paid ads are ★★ "don't lead here" until post-PMF. These tools serve the exact channels we deprioritized.
+2. **Brand mismatch.** The whole positioning is *calm, quiet, advice-neutral, trust* (B.1). Viral synthetic hype is the opposite. The ICP (FIRE/Bogleheads/dividend investors) is skeptical and anti-hype — fake AI "creator" testimonials read as scammy to exactly the people we want, *lowering* conversion.
+3. **Compliance risk (potentially disqualifying).** Synthetic testimonials/UGC that look like real users sit squarely in unfair-marketing law (EU UCPD; FTC fake-testimonial rule) — and fake endorsements of a *financial* product are a known enforcement target. An AI avatar making any portfolio/returns/"should" claim crosses the MiFID II non-advice line (`LEGAL.md`) and triggers finfluencer-promo scrutiny (Blueprint 6.4). AI Act Art. 50 requires disclosing AI-generated content — impossible to do credibly inside a clip whose point is to *not* look generated. Fails the `LEGAL.md` "would a regulator find this weird?" test.
+
+**Narrow, allowed uses** (founder-real over AI-avatar, demo over testimonial, calm over viral):
+- ✅ Product-demo b-roll, motion graphics, landing-page / Product Hunt visuals — polishing how the *actual product* looks, no synthetic people.
+- ✅ Repurposing newsletter content into calm explainer Shorts/Reels — in the quiet brand voice, AI-disclosed.
+- ⏳ Ad-creative experiments **only post-PMF**, top-of-funnel awareness only, disclaimer baked in, legal pass first.
+- ❌ Never: AI talking-head testimonials, fake-creator UGC, synthetic endorsements, any AI persona making financial claims.
+
+**Bottom line:** €9/mo for occasional demo b-roll is harmless; the UGC/testimonial features are not for a trust-dependent, compliance-bound fintech. The same time/budget on newsletter + SEO + authentic founder content returns far more.
+
 ---
 
 ## C. The critical path to a paid launch (synthesis)
