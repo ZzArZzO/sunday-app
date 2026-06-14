@@ -14,7 +14,12 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import User
-from app.schemas.delivery import DeliveryResultView, WeeklyDeliverySummary
+from app.schemas.delivery import (
+    DeliveryPreferencesUpdate,
+    DeliveryPreferencesView,
+    DeliveryResultView,
+    WeeklyDeliverySummary,
+)
 from app.services.delivery import briefing_delivery
 
 router = APIRouter(prefix="/api/delivery", tags=["delivery"])
@@ -34,6 +39,23 @@ def _to_view(result: briefing_delivery.DeliveryResult) -> DeliveryResultView:
 @router.post("/briefing", response_model=DeliveryResultView)
 def send_my_briefing(user: User = Depends(get_current_user)) -> DeliveryResultView:
     return _to_view(briefing_delivery.deliver_to_user(user))
+
+
+@router.get("/preferences", response_model=DeliveryPreferencesView)
+def get_preferences(user: User = Depends(get_current_user)) -> DeliveryPreferencesView:
+    return DeliveryPreferencesView(weekly_opt_in=user.weekly_opt_in)
+
+
+@router.put("/preferences", response_model=DeliveryPreferencesView)
+def update_preferences(
+    update: DeliveryPreferencesUpdate,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> DeliveryPreferencesView:
+    user.weekly_opt_in = update.weekly_opt_in
+    db.add(user)
+    db.commit()
+    return DeliveryPreferencesView(weekly_opt_in=user.weekly_opt_in)
 
 
 @router.post("/weekly", response_model=WeeklyDeliverySummary)

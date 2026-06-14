@@ -16,3 +16,11 @@ class WeeklyDeliverySummary(BaseModel):
     failed: int
     dry_run: bool
     results: list[DeliveryResultView]
+
+
+class DeliveryPreferencesView(BaseModel):
+    weekly_opt_in: bool
+
+
+class DeliveryPreferencesUpdate(BaseModel):
+    weekly_opt_in: bool

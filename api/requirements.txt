@@ -26,6 +26,9 @@ curl_cffi>=0.7
 # --- Scheduling (weekly Sunday briefing cron; lazy-imported, only when enabled) ---
 apscheduler>=3.10,<4
 
+# --- PDF render (briefing PDF; pure-Python, no system deps) ---
+fpdf2>=2.7,<3
+
 # --- AI (not used in the slice yet) ---
 anthropic>=0.40,<1
 

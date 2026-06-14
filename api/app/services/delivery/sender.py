@@ -7,6 +7,7 @@ it POSTs to the Resend REST API (via httpx — already a dependency).
 
 from __future__ import annotations
 
+import base64
 import logging
 from dataclasses import dataclass
 
@@ -28,11 +29,23 @@ class SendResult:
     error: str | None = None
 
 
-def send_email(to: str, subject: str, html: str, text: str | None = None) -> SendResult:
+def send_email(
+    to: str,
+    subject: str,
+    html: str,
+    text: str | None = None,
+    attachments: list[tuple[str, bytes]] | None = None,
+) -> SendResult:
+    """Send an email; `attachments` is a list of (filename, content_bytes)."""
     settings = get_settings()
 
     if not settings.resend_api_key:
-        log.info("[email dry-run] to=%s subject=%r (no RESEND_API_KEY)", to, subject)
+        log.info(
+            "[email dry-run] to=%s subject=%r attachments=%d (no RESEND_API_KEY)",
+            to,
+            subject,
+            len(attachments or []),
+        )
         return SendResult(to=to, ok=True, dry_run=True)
 
     payload: dict[str, object] = {
@@ -43,6 +56,11 @@ def send_email(to: str, subject: str, html: str, text: str | None = None) -> Sen
     }
     if text:
         payload["text"] = text
+    if attachments:
+        payload["attachments"] = [
+            {"filename": name, "content": base64.b64encode(content).decode("ascii")}
+            for name, content in attachments
+        ]
 
     try:
         resp = httpx.post(

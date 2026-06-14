@@ -1,7 +1,7 @@
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import DateTime, Numeric, String, func
+from sqlalchemy import Boolean, DateTime, Numeric, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -32,6 +32,10 @@ class User(Base):
     target_stock_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("20.00"))
     target_crypto_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("15.00"))
     target_cash_pct: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=Decimal("5.00"))
+
+    # Delivery preferences. Opt-in is off by default — the weekly cron only emails
+    # users who explicitly subscribe (no unsolicited briefings).
+    weekly_opt_in: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
     portfolios: Mapped[list["Portfolio"]] = relationship(  # noqa: F821
         back_populates="user", cascade="all, delete-orphan"

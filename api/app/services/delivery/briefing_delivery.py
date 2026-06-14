@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.models import User
 from app.services import briefing_build
-from app.services.delivery import email_render, sender
+from app.services.delivery import email_render, pdf_render, sender
 
 
 @dataclass(frozen=True)
@@ -40,7 +40,11 @@ def deliver_to_user(user: User) -> DeliveryResult:
 
     briefing = briefing_build.build_briefing(portfolio)
     rendered = email_render.render_briefing_email(briefing)
-    res = sender.send_email(user.email, rendered.subject, rendered.html, rendered.text)
+    pdf = pdf_render.render_briefing_pdf(briefing)
+    attachments = [(f"sunday-briefing-{briefing.week_of}.pdf", pdf)]
+    res = sender.send_email(
+        user.email, rendered.subject, rendered.html, rendered.text, attachments=attachments
+    )
     return DeliveryResult(
         email=user.email,
         ok=res.ok,
@@ -52,8 +56,12 @@ def deliver_to_user(user: User) -> DeliveryResult:
 
 
 def deliver_weekly(db: Session) -> WeeklySummary:
-    """Send this week's briefing to every user with an email address."""
-    users = list(db.execute(select(User).where(User.email.isnot(None))).scalars())
+    """Send this week's briefing to every user who opted in to the weekly email."""
+    users = list(
+        db.execute(
+            select(User).where(User.email.isnot(None), User.weekly_opt_in.is_(True))
+        ).scalars()
+    )
     results = [deliver_to_user(u) for u in users]
     return WeeklySummary(
         total=len(results),

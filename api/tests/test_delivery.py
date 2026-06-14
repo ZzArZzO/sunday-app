@@ -6,9 +6,10 @@ conversion (incl. escaping), the email render, and the dry-run sender.
 
 from decimal import Decimal
 
+from app.models import User
 from app.schemas import BriefingResponse, BriefingSection
 from app.schemas.portfolio import DualMoney
-from app.services.delivery import email_render, markdown_lite, sender
+from app.services.delivery import briefing_delivery, email_render, markdown_lite, pdf_render, sender
 
 
 class TestMarkdownLite:
@@ -73,6 +74,26 @@ class TestEmailRender:
         assert "Week-over-week starts once your history builds" in email.html
 
 
+class TestPdfRender:
+    def test_renders_a_valid_pdf(self):
+        pdf = pdf_render.render_briefing_pdf(_briefing())
+        # Valid PDF magic header and non-trivial content.
+        assert pdf[:5] == b"%PDF-"
+        assert pdf.rstrip().endswith(b"%%EOF")
+        assert len(pdf) > 1000
+
+    def test_handles_unicode_without_crashing(self):
+        # €, em dash, and smart quotes must not raise with core latin-1 fonts.
+        b = _briefing()
+        b.sections[1].body_markdown = "**€** flows — “quoted” … bullet:\n\n- €1,000 move"
+        pdf = pdf_render.render_briefing_pdf(b)
+        assert pdf[:5] == b"%PDF-"
+
+    def test_no_history_variant_renders(self):
+        pdf = pdf_render.render_briefing_pdf(_briefing(wow_available=False))
+        assert pdf[:5] == b"%PDF-"
+
+
 class TestSenderDryRun:
     def test_no_key_is_dry_run_and_does_not_send(self):
         # Test env has no RESEND_API_KEY → dry-run, no network call.
@@ -80,3 +101,36 @@ class TestSenderDryRun:
         assert res.ok is True
         assert res.dry_run is True
         assert res.message_id is None and res.error is None
+
+    def test_dry_run_accepts_attachments(self):
+        res = sender.send_email(
+            "user@example.com", "subj", "<p>hi</p>", "hi",
+            attachments=[("briefing.pdf", b"%PDF-1.7 ...")],
+        )
+        assert res.ok is True and res.dry_run is True
+
+
+class TestWeeklyOptIn:
+    def test_deliver_weekly_only_selects_opted_in_users(self, db):
+        # Opted-in user has no portfolio → fails fast (no briefing build, no network),
+        # which still proves it was *selected*; the opted-out user must be skipped.
+        opted_in = User(email="in@test.com", weekly_opt_in=True)
+        opted_out = User(email="out@test.com", weekly_opt_in=False)
+        db.add_all([opted_in, opted_out])
+        db.commit()
+
+        summary = briefing_delivery.deliver_weekly(db)
+
+        assert summary.total == 1
+        assert [r.email for r in summary.results] == ["in@test.com"]
+        assert summary.results[0].ok is False
+        assert summary.results[0].error == "user has no portfolio"
+
+    def test_deliver_weekly_empty_when_no_opt_ins(self, db):
+        db.add(User(email="nobody@test.com", weekly_opt_in=False))
+        db.commit()
+
+        summary = briefing_delivery.deliver_weekly(db)
+
+        assert summary.total == 0
+        assert summary.sent == 0 and summary.failed == 0
