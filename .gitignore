@@ -55,3 +55,10 @@ uploads/
 coverage/
 .next/
 .nuxt/
+
+# Capacitor — web assets/config copied into the native projects by `cap sync`
+# (regenerated each build; the native project source itself IS committed).
+web/android/app/src/main/assets/public/
+web/ios/App/App/public/
+web/android/app/src/main/assets/capacitor.config.json
+web/ios/App/App/capacitor.config.json

@@ -1,54 +1,67 @@
 name: Mobile build (Capacitor)
 
-# Scaffold for the iOS + Android build pipeline. Manual-only (workflow_dispatch)
-# so it never blocks PR CI, and it no-ops cleanly until the Capacitor projects
-# exist (web/ios, web/android). The iOS job runs on a GitHub-hosted macOS
-# runner — the free "cloud Mac" that lets a Windows developer build/sign iOS.
+# Builds the iOS + Android apps from the static export. Manual-dispatch (native
+# builds are slow and the macOS runner is costly) — not on every PR.
 #
-# When Capacitor is added, replace the "Not configured yet" guards with the real
-# build steps (sketched in comments) and wire signing secrets in repo settings.
+# Unsigned debug builds that verify the native projects compile. Release signing
+# + TestFlight / Play upload are added in the Test phase (Test-7 / Test-8) with
+# signing secrets.
+#
+# The web assets (`out/` → native `public/`) are gitignored, so each job runs
+# `cap:sync` (static export + copy) before building.
 on:
   workflow_dispatch:
 
+defaults:
+  run:
+    working-directory: web
+
 jobs:
   android:
-    name: Android (AAB)
+    name: Android (debug APK)
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
-      - name: Guard — Capacitor Android project present?
-        run: |
-          if [ ! -d android ]; then
-            echo "::warning::No Capacitor Android project (web/android) yet — pipeline activates once Capacitor is added."
-            exit 0
-          fi
-      # Future:
-      # - uses: actions/setup-node@v4 { node-version: 20, cache: npm }
-      # - uses: actions/setup-java@v4 { distribution: temurin, java-version: 17 }
-      # - run: npm ci && npm run build && npx cap sync android
-      # - run: cd android && ./gradlew bundleRelease
-      # - sign with KEYSTORE secret; upload AAB artifact / Play internal track
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+      - run: npm ci
+      - run: npm run cap:sync
+      - name: Build debug APK
+        run: cd android && chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-debug-apk
+          path: web/android/app/build/outputs/apk/debug/*.apk
+          if-no-files-found: warn
 
   ios:
-    name: iOS (IPA)
+    name: iOS (build)
     runs-on: macos-latest
     defaults:
       run:
         working-directory: web
     steps:
       - uses: actions/checkout@v4
-      - name: Guard — Capacitor iOS project present?
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci
+      - run: npm run cap:sync
+      - name: Build (unsigned, no provisioning)
         run: |
-          if [ ! -d ios ]; then
-            echo "::warning::No Capacitor iOS project (web/ios) yet — pipeline activates once Capacitor is added."
-            exit 0
-          fi
-      # Future:
-      # - uses: actions/setup-node@v4 { node-version: 20, cache: npm }
-      # - run: npm ci && npm run build && npx cap sync ios
-      # - import signing cert + provisioning profile from secrets
-      # - run: xcodebuild -workspace ios/App/App.xcworkspace -scheme App archive ...
-      # - export IPA; upload to TestFlight via altool/fastlane
+          xcodebuild -project ios/App/App.xcodeproj -scheme App \
+            -configuration Debug -destination 'generic/platform=iOS' \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO build

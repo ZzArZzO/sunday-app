@@ -9,9 +9,15 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "build:mobile": "cross-env BUILD_TARGET=capacitor next build",
+    "cap:sync": "npm run build:mobile && cap sync"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/cli": "^8.4.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/ios": "^8.4.0",
     "@visx/axis": "^4.0.0",
     "@visx/group": "^4.0.0",
     "@visx/hierarchy": "^4.0.0",
@@ -29,6 +35,7 @@
     "@types/react": "18.3.12",
     "@types/react-dom": "18.3.1",
     "autoprefixer": "10.4.20",
+    "cross-env": "^10.1.0",
     "eslint": "8.57.1",
     "eslint-config-next": "14.2.18",
     "postcss": "8.4.49",
