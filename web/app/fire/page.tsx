@@ -1,25 +1,28 @@
+"use client";
+
 import { Disclaimer } from "@/components/Disclaimer";
 import { FireTimeline } from "@/components/FireTimeline";
 import { fetchFire } from "@/lib/api";
 import { formatDual, formatEur, formatPct } from "@/lib/format";
+import { useAsync } from "@/lib/useAsync";
 
-export const dynamic = "force-dynamic";
-export const metadata = {
-  title: "FIRE planner — Sunday",
-  description: "Financial independence projection for your portfolio.",
-};
+export default function FirePage() {
+  const { data: fire, loading, error } = useAsync(fetchFire);
 
-export default async function FirePage() {
-  let fire;
-  try {
-    fire = await fetchFire();
-  } catch (err) {
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="skeleton h-16 w-2/3" />
+        <div className="skeleton h-40 w-full" />
+      </div>
+    );
+  }
+
+  if (error || !fire) {
     return (
       <div className="card border-negative/30 bg-negative-subtle/40 p-5">
         <p className="font-medium text-negative">Couldn&apos;t load FIRE planner</p>
-        <p className="mt-2 text-sm text-ink">
-          {err instanceof Error ? err.message : String(err)}
-        </p>
+        <p className="mt-2 text-sm text-ink">{error}</p>
       </div>
     );
   }

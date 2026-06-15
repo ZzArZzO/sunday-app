@@ -1,3 +1,5 @@
+"use client";
+
 import { AllocationBar } from "@/components/AllocationBar";
 import { AllocationTreemap } from "@/components/AllocationTreemap";
 import { BenchmarkChart } from "@/components/BenchmarkChart";
@@ -20,30 +22,28 @@ import {
 } from "@/lib/api";
 import { formatDual } from "@/lib/format";
 import { localeForCountry } from "@/lib/locale";
+import { useAsync } from "@/lib/useAsync";
 
-export const dynamic = "force-dynamic";
+export default function DashboardPage() {
+  const { data, loading, error } = useAsync(() =>
+    Promise.all([fetchPortfolio(), fetchFire(), fetchDividend(), fetchTax(), fetchRebalance()]),
+  );
 
-export default async function DashboardPage() {
-  let portfolio;
-  let fire;
-  let dividend;
-  let tax;
-  let rebalance;
-  try {
-    [portfolio, fire, dividend, tax, rebalance] = await Promise.all([
-      fetchPortfolio(),
-      fetchFire(),
-      fetchDividend(),
-      fetchTax(),
-      fetchRebalance(),
-    ]);
-  } catch (err) {
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <div className="skeleton h-16 w-2/3" />
+        <div className="skeleton h-24 w-full" />
+        <div className="skeleton h-48 w-full" />
+      </div>
+    );
+  }
+
+  if (error || !data) {
     return (
       <div className="card border-negative/30 bg-negative-subtle/40 p-5">
         <p className="font-medium text-negative">Couldn&apos;t load portfolio</p>
-        <p className="mt-2 text-sm text-ink">
-          {err instanceof Error ? err.message : String(err)}
-        </p>
+        <p className="mt-2 text-sm text-ink">{error}</p>
         <p className="mt-2 text-sm text-ink-muted">
           Make sure the API is running on <code className="font-mono">localhost:8000</code> and
           that you ran <code className="font-mono">python -m app.seeds.load_sample</code>.
@@ -52,6 +52,7 @@ export default async function DashboardPage() {
     );
   }
 
+  const [portfolio, fire, dividend, tax, rebalance] = data;
   const locale = localeForCountry(portfolio.country);
   const pnl = Number(portfolio.total_pnl.eur);
   const pnlClass =

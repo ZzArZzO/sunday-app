@@ -1,37 +1,42 @@
+"use client";
+
 import { Disclaimer } from "@/components/Disclaimer";
 import { DividendCard } from "@/components/DividendCard";
 import { FireCard } from "@/components/FireCard";
 import { RebalanceCard } from "@/components/RebalanceCard";
 import { TaxCard } from "@/components/TaxCard";
 import { fetchDividend, fetchFire, fetchRebalance, fetchTax } from "@/lib/api";
-
-export const dynamic = "force-dynamic";
+import { useAsync } from "@/lib/useAsync";
 
 /**
  * The "Plan" hub — groups the lower-frequency analytical views (financial
  * independence, dividend income, tax outlook, rebalancing) behind one mobile
  * tab, per the mobile UX research. Information only, never advice.
  */
-export default async function PlanPage() {
-  let fire;
-  let dividend;
-  let tax;
-  let rebalance;
-  try {
-    [fire, dividend, tax, rebalance] = await Promise.all([
-      fetchFire(),
-      fetchDividend(),
-      fetchTax(),
-      fetchRebalance(),
-    ]);
-  } catch (err) {
+export default function PlanPage() {
+  const { data, loading, error } = useAsync(() =>
+    Promise.all([fetchFire(), fetchDividend(), fetchTax(), fetchRebalance()]),
+  );
+
+  if (loading) {
     return (
-      <div className="card border-negative/30 bg-negative-subtle/40 p-5">
-        <p className="font-medium text-negative">Couldn&apos;t load your plan</p>
-        <p className="mt-2 text-sm text-ink">{err instanceof Error ? err.message : String(err)}</p>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="skeleton h-48 w-full" />
+        <div className="skeleton h-48 w-full" />
       </div>
     );
   }
+
+  if (error || !data) {
+    return (
+      <div className="card border-negative/30 bg-negative-subtle/40 p-5">
+        <p className="font-medium text-negative">Couldn&apos;t load your plan</p>
+        <p className="mt-2 text-sm text-ink">{error}</p>
+      </div>
+    );
+  }
+
+  const [fire, dividend, tax, rebalance] = data;
 
   return (
     <div className="space-y-10 fade-up sm:space-y-12">
