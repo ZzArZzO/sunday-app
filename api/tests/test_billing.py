@@ -135,6 +135,33 @@ class TestWebhook:
         assert user.subscription_status == "active"
         assert subscription.is_pro(user) is True
 
+    def test_period_end_falls_back_to_items(self, db, monkeypatch):
+        # Newer Stripe API versions put current_period_end on items, not the sub.
+        secret = self._configure(monkeypatch)
+        user = User(email="w@test.com", stripe_customer_id="cus_y")
+        db.add(user)
+        db.commit()
+
+        event = {
+            "type": "customer.subscription.created",
+            "data": {
+                "object": {
+                    "id": "sub_2",
+                    "customer": "cus_y",
+                    "status": "active",
+                    "items": {"data": [{"current_period_end": 1_900_000_000}]},
+                }
+            },
+        }
+        payload = json.dumps(event).encode()
+        webhooks.process_event(db, payload, _signed_header(payload, secret))
+
+        end = user.subscription_period_end
+        assert end is not None
+        if end.tzinfo is None:
+            end = end.replace(tzinfo=timezone.utc)
+        assert int(end.timestamp()) == 1_900_000_000
+
     def test_subscription_deleted_downgrades_user(self, db, monkeypatch):
         secret = self._configure(monkeypatch)
         user = User(

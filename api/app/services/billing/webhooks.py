@@ -21,6 +21,16 @@ _SUBSCRIPTION_EVENTS = frozenset(
 )
 
 
+def _period_end(sub: dict) -> int | None:
+    """Current period end (unix). Newer Stripe API versions moved this off the
+    subscription object onto its line items, so fall back to the first item."""
+    end = sub.get("current_period_end")
+    if end:
+        return end
+    items = (sub.get("items") or {}).get("data") or []
+    return items[0].get("current_period_end") if items else None
+
+
 def process_event(db: Session, payload: bytes, sig_header: str | None) -> str:
     """Verify the signature and apply the event. Returns the handled event type.
 
@@ -43,7 +53,7 @@ def process_event(db: Session, payload: bytes, sig_header: str | None) -> str:
             customer_id=sub["customer"],
             subscription_id=sub.get("id"),
             status=status,
-            current_period_end=sub.get("current_period_end"),
+            current_period_end=_period_end(sub),
         )
 
     return etype
