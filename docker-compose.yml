@@ -31,6 +31,10 @@ services:
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       FMP_API_KEY: ${FMP_API_KEY:-}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      APP_BASE_URL: ${APP_BASE_URL:-http://localhost:3001}
     ports:
       - "${API_PORT:-8000}:8000"
     depends_on:
