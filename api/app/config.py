@@ -33,6 +33,13 @@ class Settings(BaseSettings):
     # Weekly Sunday-briefing cron. Off by default; flip on in a deployed instance.
     enable_scheduler: bool = False
 
+    # Native push (Firebase Cloud Messaging, HTTP v1). Both empty → push dry-run
+    # (logged, not sent), like the email tier without a Resend key. iOS routes
+    # through FCM too (upload the APNs key to Firebase). See docs/MOBILE_PUSH_SETUP.md.
+    fcm_project_id: str = ""
+    # Path to the Firebase service-account key JSON (keep it out of source control).
+    fcm_credentials_json: str = ""
+
     # --- Auth ---
     # Public URL of the API itself (magic links point here). The web app is app_base_url.
     api_base_url: str = "http://localhost:8000"

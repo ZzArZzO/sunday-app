@@ -3,6 +3,7 @@
 import { BriefingActions } from "@/components/BriefingActions";
 import { BriefingView } from "@/components/BriefingView";
 import { EventsCard } from "@/components/EventsCard";
+import { PushPrimer } from "@/components/PushPrimer";
 import { WeeklyOptInToggle } from "@/components/WeeklyOptInToggle";
 import { fetchBriefing } from "@/lib/api";
 import { useAsync } from "@/lib/useAsync";
@@ -34,6 +35,7 @@ export default function BriefingPage() {
       <div className="space-y-3">
         <BriefingActions />
         <WeeklyOptInToggle />
+        <PushPrimer />
       </div>
       <EventsCard />
     </div>

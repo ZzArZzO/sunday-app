@@ -5,6 +5,7 @@ from app.models.lot import Lot
 from app.models.portfolio import Portfolio
 from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.models.position import Position
+from app.models.push_token import PushToken
 from app.models.user import User
 
 __all__ = [
@@ -17,4 +18,5 @@ __all__ = [
     "MagicToken",
     "UserSession",
     "LlmCallLog",
+    "PushToken",
 ]

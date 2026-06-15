@@ -151,6 +151,23 @@ export async function refreshPrices(): Promise<PriceRefreshResponse> {
   return http<PriceRefreshResponse>("/api/prices/refresh", { method: "POST" });
 }
 
+/** Register this device's native push token (mobile only — see lib/push.ts). */
+export async function registerPushToken(
+  token: string,
+  platform: "ios" | "android" | "web",
+): Promise<{ ok: boolean }> {
+  return http<{ ok: boolean }>("/api/push/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, platform }),
+  });
+}
+
+/** Send a test push to the signed-in user's devices (dry-run without FCM creds). */
+export async function sendTestPush(): Promise<{ sent: number; dry_run: boolean }> {
+  return http<{ sent: number; dry_run: boolean }>("/api/push/test", { method: "POST" });
+}
+
 export async function sendChat(messages: ChatMessage[]): Promise<ChatResponse> {
   return http<ChatResponse>("/api/chat", {
     method: "POST",

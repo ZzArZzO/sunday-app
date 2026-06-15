@@ -16,6 +16,7 @@ from app.routes import (
     ingest,
     portfolio,
     prices,
+    push,
     rebalance,
     snapshots,
     tax,
@@ -56,6 +57,7 @@ app.include_router(benchmark.router)
 app.include_router(delivery.router)
 app.include_router(auth.router)
 app.include_router(billing.router)
+app.include_router(push.router)
 
 
 @app.on_event("startup")

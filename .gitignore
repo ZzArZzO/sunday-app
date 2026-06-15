@@ -62,3 +62,9 @@ web/android/app/src/main/assets/public/
 web/ios/App/App/public/
 web/android/app/src/main/assets/capacitor.config.json
 web/ios/App/App/capacitor.config.json
+
+# Firebase / FCM credentials (push notifications) — secrets, never commit.
+# See docs/MOBILE_PUSH_SETUP.md.
+web/android/app/google-services.json
+web/ios/App/App/GoogleService-Info.plist
+**/firebase-service-account*.json
