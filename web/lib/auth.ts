@@ -2,6 +2,8 @@
 // session cookie; mobile (Capacitor) uses a stored Bearer token (lib/authToken).
 
 import { clearAuthToken, getAuthToken, setAuthToken } from "@/lib/authToken";
+import { isLockEnabled } from "@/lib/biometricPref";
+import { clearPersistedToken, persistToken } from "@/lib/secureToken";
 
 function apiUrl(): string {
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -55,6 +57,7 @@ export async function logout(): Promise<void> {
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
   });
   clearAuthToken();
+  await clearPersistedToken();
 }
 
 /**
@@ -77,5 +80,7 @@ export async function exchangeMagicToken(magicToken: string): Promise<Me> {
     country: string | null;
   };
   setAuthToken(data.session_token);
+  // Persist to the Keychain/Keystore, biometric-protected unless the user opted out.
+  await persistToken(data.session_token, isLockEnabled());
   return { authenticated: true, email: data.email, country: data.country };
 }

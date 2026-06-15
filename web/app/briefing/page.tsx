@@ -2,6 +2,7 @@
 
 import { BriefingActions } from "@/components/BriefingActions";
 import { BriefingView } from "@/components/BriefingView";
+import { BiometricLockToggle } from "@/components/BiometricLockToggle";
 import { EventsCard } from "@/components/EventsCard";
 import { PushPrimer } from "@/components/PushPrimer";
 import { WeeklyOptInToggle } from "@/components/WeeklyOptInToggle";
@@ -36,6 +37,7 @@ export default function BriefingPage() {
         <BriefingActions />
         <WeeklyOptInToggle />
         <PushPrimer />
+        <BiometricLockToggle />
       </div>
       <EventsCard />
     </div>

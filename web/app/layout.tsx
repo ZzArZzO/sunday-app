@@ -4,6 +4,7 @@ import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 
 import "./globals.css";
+import { BiometricGate } from "@/components/BiometricGate";
 import { MobileTabBar } from "@/components/MobileTabBar";
 import { NavBar } from "@/components/NavBar";
 
@@ -55,15 +56,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body className="min-h-dvh">
-        <NavBar />
-        <main className="container-narrow pt-8 pb-24 sm:pt-12 md:pt-16 md:pb-16">{children}</main>
-        <MobileTabBar />
-        <footer className="container-narrow border-t border-rule py-8 pb-24 text-xs text-ink-subtle md:pb-8">
-          <p>
-            Sunday is information, not advice. Numbers are computed deterministically; the narrative
-            sections are generated with AI assistance.
-          </p>
-        </footer>
+        <BiometricGate>
+          <NavBar />
+          <main className="container-narrow pt-8 pb-24 sm:pt-12 md:pt-16 md:pb-16">{children}</main>
+          <MobileTabBar />
+          <footer className="container-narrow border-t border-rule py-8 pb-24 text-xs text-ink-subtle md:pb-8">
+            <p>
+              Sunday is information, not advice. Numbers are computed deterministically; the
+              narrative sections are generated with AI assistance.
+            </p>
+          </footer>
+        </BiometricGate>
       </body>
     </html>
   );

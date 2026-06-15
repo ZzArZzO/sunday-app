@@ -45,7 +45,7 @@ export default function SignInPage() {
           <p className="text-sm leading-relaxed text-ink-muted">
             We sent a sign-in link to <strong>{state.email}</strong>. It expires in 15 minutes.
           </p>
-          {state.devLink ? (
+          {state.devLink && /^https?:\/\//.test(state.devLink) ? (
             <p className="text-sm text-ink-muted">
               Dev mode (no email provider configured) —{" "}
               <a href={state.devLink} className="font-medium text-accent underline">
