@@ -12,11 +12,14 @@ type Status =
   | { kind: "error"; message: string };
 
 /**
- * Fetches live prices + EUR/USD for the portfolio, then refreshes the server
- * component so the new numbers render. Honest about partial results: shows how
- * many holdings could be priced and warns if FX is still the placeholder.
+ * Fetches live prices + EUR/USD for the portfolio, then re-fetches the data so
+ * the new numbers render. Honest about partial results: shows how many holdings
+ * could be priced and warns if FX is still the placeholder.
+ *
+ * `onRefreshed` lets a client page re-fetch its data (the dashboard passes
+ * `useAsync().refetch`); without it we fall back to `router.refresh()`.
  */
-export function RefreshPricesButton() {
+export function RefreshPricesButton({ onRefreshed }: { onRefreshed?: () => void }) {
   const router = useRouter();
   const [status, setStatus] = useState<Status>({ kind: "idle" });
 
@@ -30,7 +33,8 @@ export function RefreshPricesButton() {
         unpriced: res.unpriced,
         live: res.eur_usd_source !== "placeholder",
       });
-      router.refresh();
+      if (onRefreshed) onRefreshed();
+      else router.refresh();
     } catch (err) {
       setStatus({ kind: "error", message: err instanceof Error ? err.message : String(err) });
     }

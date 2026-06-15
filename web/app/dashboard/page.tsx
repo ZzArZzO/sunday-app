@@ -25,21 +25,20 @@ import { localeForCountry } from "@/lib/locale";
 import { useAsync } from "@/lib/useAsync";
 
 export default function DashboardPage() {
-  const { data, loading, error } = useAsync(() =>
+  const { data, loading, error, refetch } = useAsync(() =>
     Promise.all([fetchPortfolio(), fetchFire(), fetchDividend(), fetchTax(), fetchRebalance()]),
   );
 
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="skeleton h-16 w-2/3" />
-        <div className="skeleton h-24 w-full" />
-        <div className="skeleton h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (error || !data) {
+  if (!data) {
+    if (loading) {
+      return (
+        <div className="space-y-6">
+          <div className="skeleton h-16 w-2/3" />
+          <div className="skeleton h-24 w-full" />
+          <div className="skeleton h-48 w-full" />
+        </div>
+      );
+    }
     return (
       <div className="card border-negative/30 bg-negative-subtle/40 p-5">
         <p className="font-medium text-negative">Couldn&apos;t load portfolio</p>
@@ -82,7 +81,7 @@ export default function DashboardPage() {
           total={portfolio.positions.length}
           fxEurUsd={portfolio.fx_eur_usd}
         />
-        <RefreshPricesButton />
+        <RefreshPricesButton onRefreshed={refetch} />
       </header>
 
       <section className="space-y-4">
