@@ -15,9 +15,15 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import get_current_user
 from app.models import User
-from app.schemas.billing import CheckoutSessionView, PortalSessionView, SubscriptionView
+from app.schemas.billing import (
+    CheckoutSessionView,
+    LlmUsageSummary,
+    PortalSessionView,
+    SubscriptionView,
+)
 from app.services.billing import checkout, portal, subscription, webhooks
 from app.services.billing.client import BillingNotConfigured
+from app.services.llm import cost_ledger
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
 
@@ -51,6 +57,20 @@ def open_portal(user: User = Depends(get_current_user)) -> PortalSessionView:
     except BillingNotConfigured as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     return PortalSessionView(url=url)
+
+
+@router.get("/llm-usage", response_model=LlmUsageSummary)
+def llm_usage(
+    days: int = 30,
+    user: User = Depends(get_current_user),  # noqa: ARG001 - auth gate
+    db: Session = Depends(get_db),
+) -> LlmUsageSummary:
+    """Measured AI COGS over the last `days`, total and per feature/user.
+
+    TODO: gate behind an admin role before production — this exposes per-user
+    cost aggregates. Auth-only for now.
+    """
+    return LlmUsageSummary(**cost_ledger.summary(db, days=days))
 
 
 @router.post("/webhook")

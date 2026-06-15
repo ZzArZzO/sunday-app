@@ -19,7 +19,7 @@ from datetime import datetime
 from pydantic import BaseModel
 
 from app.config import get_settings
-from app.services.llm import guardrails
+from app.services.llm import cost_ledger, guardrails
 from app.services.llm.client import get_client
 from app.services.prices.base import PriceProvider
 
@@ -102,6 +102,8 @@ def _parse(system: str, user: str) -> _MarketLLM:
         messages=[{"role": "user", "content": user}],
         output_format=_MarketLLM,
     )
+    # Shared across all users (once per ISO week) → log with no user attribution.
+    cost_ledger.record_response("market_layer", resp, user_id=None)
     return resp.parsed_output
 
 

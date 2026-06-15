@@ -26,7 +26,7 @@ from app.models import Portfolio
 from app.schemas import BriefingResponse
 from app.services.events import summary as events_summary
 from app.services.events.base import EventsFeed
-from app.services.llm import guardrails, market_layer, portfolio_context
+from app.services.llm import cost_ledger, guardrails, market_layer, portfolio_context
 from app.services.llm.client import get_client
 from app.services.prices.yfinance_provider import YFinanceProvider
 
@@ -90,7 +90,14 @@ def _facts(
     return facts
 
 
-def _generate(facts: str, ctx: market_layer.MarketContext, *, strict: bool = False) -> NarrativeOut:
+def _generate(
+    facts: str,
+    ctx: market_layer.MarketContext,
+    *,
+    strict: bool = False,
+    user_id: int | None = None,
+    portfolio_id: int | None = None,
+) -> NarrativeOut:
     client = get_client()
     settings = get_settings()
     market_block = (
@@ -109,10 +116,14 @@ def _generate(facts: str, ctx: market_layer.MarketContext, *, strict: bool = Fal
         messages=[{"role": "user", "content": facts + "\n\nWrite the two sections."}],
         output_format=_NarrativeLLM,
     )
+    cost_ledger.record_response(
+        "briefing_narrative", resp, user_id=user_id, portfolio_id=portfolio_id
+    )
     out = resp.parsed_output
     narrative = NarrativeOut(this_week=out.this_week.strip(), regime=out.regime.strip())
     if not strict and not _accept(narrative):
-        return _generate(facts, ctx, strict=True)  # one stricter retry
+        # one stricter retry
+        return _generate(facts, ctx, strict=True, user_id=user_id, portfolio_id=portfolio_id)
     return narrative
 
 
@@ -159,7 +170,12 @@ def enhance(
     try:
         provider = YFinanceProvider()
         ctx = market_layer.get_market_context(provider, now)
-        narrative = _generate(_facts(response, portfolio, events), ctx)
+        narrative = _generate(
+            _facts(response, portfolio, events),
+            ctx,
+            user_id=portfolio.user_id,
+            portfolio_id=portfolio.id,
+        )
     except Exception as exc:  # noqa: BLE001 - any failure → deterministic briefing
         log.warning("briefing AI enhancement skipped: %s", exc)
         return response, False

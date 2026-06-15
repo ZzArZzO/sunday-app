@@ -22,7 +22,7 @@ from dataclasses import dataclass
 
 from app.models import Portfolio
 from app.schemas.chat import ChatMessage
-from app.services.llm import guardrails, portfolio_context
+from app.services.llm import cost_ledger, guardrails, portfolio_context
 from app.services.llm.client import get_client
 
 from app.config import get_settings
@@ -109,6 +109,7 @@ def answer(portfolio: Portfolio, messages: list[ChatMessage]) -> AssistantReply:
     system = _system_blocks(portfolio)
     convo = _to_anthropic_messages(messages)
     grounding = portfolio_context.build_grounding(portfolio)
+    uid, pid = getattr(portfolio, "user_id", None), getattr(portfolio, "id", None)
 
     first = client.messages.create(
         model=model,
@@ -116,6 +117,7 @@ def answer(portfolio: Portfolio, messages: list[ChatMessage]) -> AssistantReply:
         system=system,
         messages=convo,
     )
+    cost_ledger.record_response("chat", first, user_id=uid, portfolio_id=pid)
     reply = _extract_text(first.content)
 
     result = guardrails.scan(reply)
@@ -136,6 +138,7 @@ def answer(portfolio: Portfolio, messages: list[ChatMessage]) -> AssistantReply:
         system=system,
         messages=retry_messages,
     )
+    cost_ledger.record_response("chat_reprompt", second, user_id=uid, portfolio_id=pid)
     retry_reply = _extract_text(second.content)
 
     if guardrails.scan(retry_reply).clean:
@@ -185,6 +188,8 @@ def answer_stream(portfolio: Portfolio, messages: list[ChatMessage]) -> Iterator
     system = _system_blocks(portfolio)
     convo = _to_anthropic_messages(messages)
     grounding = _grounding_payload(portfolio_context.build_grounding(portfolio))
+    # Capture ids up-front (plain columns, safe even if the session closes mid-stream).
+    uid, pid = getattr(portfolio, "user_id", None), getattr(portfolio, "id", None)
 
     buffer = ""
     released = 0
@@ -205,6 +210,15 @@ def answer_stream(portfolio: Portfolio, messages: list[ChatMessage]) -> Iterator
             if safe_upto > released:
                 yield {"type": "delta", "text": buffer[released:safe_upto]}
                 released = safe_upto
+        if not tripped:
+            # Clean full stream — usage is final and retrievable. Never let
+            # usage logging break the stream.
+            try:
+                cost_ledger.record_response(
+                    "chat_stream", stream.get_final_message(), user_id=uid, portfolio_id=pid
+                )
+            except Exception:  # noqa: BLE001
+                pass
 
     if not tripped:
         if released < len(buffer):
@@ -225,6 +239,7 @@ def answer_stream(portfolio: Portfolio, messages: list[ChatMessage]) -> Iterator
         system=system,
         messages=retry_messages,
     )
+    cost_ledger.record_response("chat_reprompt", second, user_id=uid, portfolio_id=pid)
     retry_reply = _extract_text(second.content)
     clean = retry_reply if guardrails.scan(retry_reply).clean else guardrails.SAFE_FALLBACK_REPLY
     yield {"type": "replace", "text": clean}
