@@ -19,6 +19,11 @@ class Settings(BaseSettings):
     anthropic_chat_model: str = "claude-sonnet-4-6"
     anthropic_guard_model: str = "claude-haiku-4-5"
     chat_max_tokens: int = 1024
+    # Monthly AI spend cap per user (USD), enforced from the llm_call_log ledger.
+    # A margin backstop: once a user crosses it, AI features degrade gracefully
+    # until the 1st. Set well above expected usage (see docs verification).
+    ai_monthly_budget_free_usd: float = 0.25
+    ai_monthly_budget_pro_usd: float = 5.0
     fmp_api_key: str = ""
 
     # Email delivery (Resend). Empty key → dry-run (render but don't send).

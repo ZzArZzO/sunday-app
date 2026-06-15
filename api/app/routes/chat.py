@@ -14,15 +14,18 @@ from collections.abc import Iterator
 import anthropic
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
 
-from app.deps import get_default_portfolio
-from app.models import Portfolio
+from app.db import get_db
+from app.deps import get_current_user, get_default_portfolio
+from app.models import Portfolio, User
 from app.schemas.chat import (
     ChatGrounding,
     ChatGroundingHolding,
     ChatRequest,
     ChatResponse,
 )
+from app.services.billing import budget
 from app.services.llm import assistant
 from app.services.llm.client import LLMNotConfigured
 
@@ -41,8 +44,20 @@ def _require_user_last(body: ChatRequest) -> None:
 def post_chat(
     body: ChatRequest,
     portfolio: Portfolio = Depends(get_default_portfolio),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> ChatResponse:
     _require_user_last(body)
+
+    if budget.is_exhausted(db, user):
+        # Canned (not AI-generated) → drop the "Generated with AI assistance" line.
+        return ChatResponse(
+            reply=budget.ALLOWANCE_MESSAGE,
+            model="",
+            guardrail_triggered=False,
+            grounding=None,
+            disclaimers=["Not investment advice. Information only."],
+        )
 
     try:
         result = assistant.answer(portfolio, body.messages)
@@ -78,6 +93,8 @@ def post_chat(
 def post_chat_stream(
     body: ChatRequest,
     portfolio: Portfolio = Depends(get_default_portfolio),
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ) -> StreamingResponse:
     """Server-sent-events variant. Each event is one `data: {json}` line.
 
@@ -85,8 +102,13 @@ def post_chat_stream(
     advice-shaped text is caught before it leaves the server.
     """
     _require_user_last(body)
+    exhausted = budget.is_exhausted(db, user)
 
     def event_stream() -> Iterator[str]:
+        if exhausted:
+            yield f"data: {json.dumps({'type': 'delta', 'text': budget.ALLOWANCE_MESSAGE})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'guardrail_triggered': False, 'model': '', 'grounding': None})}\n\n"
+            return
         try:
             for event in assistant.answer_stream(portfolio, body.messages):
                 yield f"data: {json.dumps(event)}\n\n"

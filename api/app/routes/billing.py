@@ -16,12 +16,13 @@ from app.db import get_db
 from app.deps import get_current_user
 from app.models import User
 from app.schemas.billing import (
+    AiBudgetView,
     CheckoutSessionView,
     LlmUsageSummary,
     PortalSessionView,
     SubscriptionView,
 )
-from app.services.billing import checkout, portal, subscription, webhooks
+from app.services.billing import budget, checkout, portal, subscription, webhooks
 from app.services.billing.client import BillingNotConfigured
 from app.services.llm import cost_ledger
 
@@ -57,6 +58,21 @@ def open_portal(user: User = Depends(get_current_user)) -> PortalSessionView:
     except BillingNotConfigured as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc))
     return PortalSessionView(url=url)
+
+
+@router.get("/ai-budget", response_model=AiBudgetView)
+def ai_budget(
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> AiBudgetView:
+    """The signed-in user's monthly AI allowance: cap, spent month-to-date, remaining."""
+    s = budget.status(db, user)
+    return AiBudgetView(
+        cap_usd=str(s["cap_usd"]),
+        spent_usd=str(s["spent_usd"]),
+        remaining_usd=str(s["remaining_usd"]),
+        exhausted=s["exhausted"],
+    )
 
 
 @router.get("/llm-usage", response_model=LlmUsageSummary)

@@ -36,3 +36,10 @@ class LlmUsageSummary(BaseModel):
     total_calls: int
     by_feature: list[LlmUsageFeature]
     by_user: list[LlmUsageUser]
+
+
+class AiBudgetView(BaseModel):
+    cap_usd: str
+    spent_usd: str
+    remaining_usd: str
+    exhausted: bool

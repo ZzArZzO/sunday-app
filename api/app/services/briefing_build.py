@@ -14,7 +14,7 @@ from app.services.events import summary as events_summary
 from app.services.llm import briefing_ai
 
 
-def build_briefing(portfolio: Portfolio) -> BriefingResponse:
+def build_briefing(portfolio: Portfolio, *, ai_enabled: bool = True) -> BriefingResponse:
     briefing = briefing_composer.compose_briefing(portfolio)
 
     # Real "what changed this week" events — best-effort, never breaks the briefing.
@@ -25,6 +25,7 @@ def build_briefing(portfolio: Portfolio) -> BriefingResponse:
     except Exception:  # noqa: BLE001
         feed = None
 
-    # AI narrative when configured; deterministic fallback otherwise.
-    briefing, _ai_used = briefing_ai.enhance(briefing, portfolio, events=feed)
+    # AI narrative when configured and within budget; deterministic fallback otherwise.
+    if ai_enabled:
+        briefing, _ai_used = briefing_ai.enhance(briefing, portfolio, events=feed)
     return briefing
