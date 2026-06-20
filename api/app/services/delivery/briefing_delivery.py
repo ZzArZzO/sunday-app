@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.models import User
+from app.models import User, WeeklyDelivery
 from app.services import briefing_build
 from app.services.billing.subscription import PRO_STATUSES
 from app.services.delivery import (
@@ -84,8 +86,20 @@ def deliver_to_user(user: User, db: Session | None = None) -> DeliveryResult:
     )
 
 
+def _current_iso_week() -> str:
+    """ISO week key like '2026-W25' (UTC), used to dedupe weekly sends."""
+    iso = datetime.now(timezone.utc).isocalendar()
+    return f"{iso[0]}-W{iso[1]:02d}"
+
+
 def deliver_weekly(db: Session) -> WeeklySummary:
-    """Send this week's briefing to every opted-in Pro user (the weekly email is Pro-only)."""
+    """Send this week's briefing to every opted-in Pro user (the weekly email is Pro-only).
+
+    Idempotent per ISO week: a (user_id, iso_week) row is claimed via a unique
+    constraint *before* sending, so a re-run — or a second scheduler instance —
+    cannot double-send. If a send fails, the claim is released so a later run retries.
+    """
+    iso_week = _current_iso_week()
     users = list(
         db.execute(
             select(User).where(
@@ -95,7 +109,30 @@ def deliver_weekly(db: Session) -> WeeklySummary:
             )
         ).scalars()
     )
-    results = [deliver_to_user(u, db) for u in users]
+
+    results: list[DeliveryResult] = []
+    for user in users:
+        # Claim this user's slot for the week (at-most-once across instances).
+        claim = WeeklyDelivery(user_id=user.id, iso_week=iso_week)
+        db.add(claim)
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
+            continue  # already delivered (or claimed) this ISO week — skip
+
+        try:
+            res = deliver_to_user(user, db)
+        except Exception as exc:  # noqa: BLE001 — one user must not break the batch
+            res = DeliveryResult(email=user.email or "", ok=False, error=str(exc))
+
+        if not res.ok:
+            # Release the claim so a later run can retry this user.
+            db.delete(claim)
+            db.commit()
+
+        results.append(res)
+
     return WeeklySummary(
         total=len(results),
         sent=sum(1 for r in results if r.ok),

@@ -9,7 +9,7 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from app.config import get_settings
 from app.db import SessionLocal
@@ -29,6 +29,22 @@ DEMO_LAST_PRICES_EUR = {
     "ETH": Decimal("3200.00"),
     "SOL": Decimal("145.00"),
 }
+
+
+def _resync_sequences(db) -> None:
+    """Seeding inserts a fixed demo user id, which leaves users_id_seq behind so
+    the next real sign-up collides on id. Re-sync sequences to MAX(id) (Postgres).
+    No-op on engines without sequences (e.g. SQLite)."""
+    if db.bind.dialect.name != "postgresql":
+        return
+    for table in ("users", "portfolios"):
+        db.execute(
+            text(
+                f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
+                f"(SELECT COALESCE(MAX(id), 1) FROM {table}), true)"
+            )
+        )
+    db.commit()
 
 
 def main() -> None:
@@ -64,6 +80,7 @@ def main() -> None:
                 position.last_price_eur = last
 
         db.commit()
+        _resync_sequences(db)
         print(
             f"Seeded user_id={user.id} portfolio_id={portfolio.id}: "
             f"{result.rows_read} rows, {result.positions_created} positions, "
