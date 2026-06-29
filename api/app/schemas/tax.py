@@ -7,6 +7,13 @@ from pydantic import BaseModel, Field
 from app.schemas.portfolio import DualMoney
 
 
+class SupportedCountry(BaseModel):
+    """A country the tax engine has a profile for (drives the country selector)."""
+
+    code: str = Field(..., description="ISO-3166 alpha-2")
+    name: str
+
+
 class TaxBracket(BaseModel):
     """One slice of a country's capital-gains tax model."""
 

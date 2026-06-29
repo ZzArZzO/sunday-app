@@ -100,7 +100,7 @@ export default function DashboardPage() {
 
       <section className="grid gap-4 lg:grid-cols-2">
         <RebalanceCard rebalance={rebalance} />
-        <TaxCard tax={tax} />
+        <TaxCard tax={tax} onCountryChange={refetch} />
       </section>
 
       <section className="space-y-4">

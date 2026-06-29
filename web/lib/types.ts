@@ -167,6 +167,11 @@ export type CryptoHoldingPeriodView = {
   tax_free: boolean;
 };
 
+export type SupportedCountry = {
+  code: string;
+  name: string;
+};
+
 export type TaxSummaryResponse = {
   country: string;
   country_name: string;

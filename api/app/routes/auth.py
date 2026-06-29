@@ -19,13 +19,17 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
+from app.deps import get_current_user
+from app.models import User
 from app.schemas.auth import (
     ExchangeRequest,
     ExchangeResponse,
     MagicLinkRequest,
     MagicLinkResponse,
     MeResponse,
+    UpdateCountryRequest,
 )
+from app.services import tax_summary
 from app.services.auth import tokens as auth_tokens
 from app.services.auth import users as auth_users
 from app.services.delivery import sender
@@ -106,6 +110,25 @@ def me(request: Request, db: Session = Depends(get_db)) -> MeResponse:
     user = auth_tokens.lookup_session(db, token) if token else None
     if user is None:
         return MeResponse(authenticated=False)
+    return MeResponse(authenticated=True, email=user.email, country=user.country)
+
+
+@router.put("/country", response_model=MeResponse)
+def update_country(
+    body: UpdateCountryRequest,
+    user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    """Set the signed-in user's tax-residence country (drives the tax summary + locale)."""
+    code = body.country.strip().upper()
+    if code not in tax_summary.COUNTRY_PROFILES:
+        supported = ", ".join(sorted(tax_summary.COUNTRY_PROFILES))
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unsupported country '{code}'. Supported: {supported}.",
+        )
+    user.country = code
+    db.commit()
     return MeResponse(authenticated=True, email=user.email, country=user.country)
 
 

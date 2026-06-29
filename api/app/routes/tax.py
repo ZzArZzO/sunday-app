@@ -5,10 +5,24 @@ from fastapi import APIRouter, Depends
 
 from app.deps import get_current_user, get_default_portfolio
 from app.models import Portfolio, User
-from app.schemas.tax import CryptoHoldingPeriodView, TaxBracket, TaxSummaryResponse
+from app.schemas.tax import (
+    CryptoHoldingPeriodView,
+    SupportedCountry,
+    TaxBracket,
+    TaxSummaryResponse,
+)
 from app.services import dividend_projector, fx, pnl, tax_summary
 
 router = APIRouter(prefix="/api/tax", tags=["tax"])
+
+
+@router.get("/countries", response_model=list[SupportedCountry])
+def list_supported_countries() -> list[SupportedCountry]:
+    """Countries the tax engine supports, sorted by name — drives the selector."""
+    return sorted(
+        (SupportedCountry(code=p.code, name=p.name) for p in tax_summary.COUNTRY_PROFILES.values()),
+        key=lambda c: c.name,
+    )
 
 
 @router.get("", response_model=TaxSummaryResponse)

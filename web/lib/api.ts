@@ -15,6 +15,7 @@ import type {
   PriceRefreshResponse,
   RebalanceResponse,
   Subscription,
+  SupportedCountry,
   TaxSummaryResponse,
 } from "@/lib/types";
 import { getAuthToken } from "@/lib/authToken";
@@ -133,6 +134,20 @@ export async function fetchDividend(): Promise<DividendResponse> {
 
 export async function fetchTax(): Promise<TaxSummaryResponse> {
   return http<TaxSummaryResponse>("/api/tax");
+}
+
+/** Countries the tax engine supports — drives the country selector. */
+export async function fetchSupportedCountries(): Promise<SupportedCountry[]> {
+  return http<SupportedCountry[]>("/api/tax/countries");
+}
+
+/** Set the signed-in user's tax-residence country (ISO-3166 alpha-2). */
+export async function updateCountry(code: string): Promise<{ country: string | null }> {
+  return http<{ country: string | null }>("/api/auth/country", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ country: code }),
+  });
 }
 
 export async function fetchRebalance(): Promise<RebalanceResponse> {

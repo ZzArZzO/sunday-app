@@ -1,11 +1,14 @@
+import { CountrySelector } from "@/components/CountrySelector";
 import type { CryptoHoldingPeriodView, TaxSummaryResponse } from "@/lib/types";
 import { formatDual, formatEur, formatPct } from "@/lib/format";
 
 interface TaxCardProps {
   tax: TaxSummaryResponse;
+  /** Refetch country-dependent data after the user changes their tax residence. */
+  onCountryChange?: () => void;
 }
 
-export function TaxCard({ tax }: TaxCardProps) {
+export function TaxCard({ tax, onCountryChange }: TaxCardProps) {
   const unrealised = Number(tax.unrealised_gains.eur);
   const isGain = unrealised > 0;
   const direction = isGain ? "gain" : unrealised === 0 ? "flat" : "loss";
@@ -19,6 +22,11 @@ export function TaxCard({ tax }: TaxCardProps) {
             {tax.country_name} ·{" "}
             <span className="font-mono">{formatPct(tax.base_rate_pct)} headline</span>
           </p>
+          {onCountryChange ? (
+            <div className="mt-2">
+              <CountrySelector current={tax.country} onChanged={onCountryChange} />
+            </div>
+          ) : null}
         </div>
         <span
           className={`inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium ${
