@@ -68,3 +68,49 @@ def test_loss_produces_no_tax() -> None:
     )
     assert calc.tax_due_eur == Decimal("0")
     assert calc.taxable_gains_eur == Decimal("0")
+
+
+# All 20 eurozone members must have a tax profile.
+EUROZONE = {
+    "AT", "BE", "HR", "CY", "EE", "FI", "FR", "DE", "GR", "IE",
+    "IT", "LV", "LT", "LU", "MT", "NL", "PT", "SK", "SI", "ES",
+}
+
+
+def test_all_eurozone_countries_have_a_profile() -> None:
+    missing = EUROZONE - set(tax_summary.COUNTRY_PROFILES)
+    assert not missing, f"missing eurozone tax profiles: {sorted(missing)}"
+
+
+def test_every_profile_is_internally_consistent() -> None:
+    for code, profile in tax_summary.COUNTRY_PROFILES.items():
+        assert profile.code == code
+        assert profile.base_rate_pct >= Decimal("0")
+        assert profile.brackets, f"{code} should describe at least one bracket"
+
+
+def test_every_profile_estimates_without_error() -> None:
+    # The estimate must run and stay non-negative for every country.
+    for code, profile in tax_summary.COUNTRY_PROFILES.items():
+        calc = tax_summary.estimate_tax_on_unrealised(
+            profile,
+            unrealised_gains_eur=Decimal("5000"),
+            market_value_eur=Decimal("50000"),
+        )
+        assert calc.tax_due_eur >= Decimal("0"), code
+        # Tax can never exceed the gain under the single-bracket model.
+        assert calc.tax_due_eur <= Decimal("5000"), code
+
+
+def test_zero_cgt_countries_show_no_capital_gains_tax() -> None:
+    # Belgium, Cyprus, Luxembourg, Malta exempt private securities gains.
+    for code in ("BE", "CY", "LU", "MT"):
+        profile = tax_summary.profile_for(code)
+        calc = tax_summary.estimate_tax_on_unrealised(
+            profile,
+            unrealised_gains_eur=Decimal("10000"),
+            market_value_eur=Decimal("100000"),
+        )
+        assert calc.tax_due_eur == Decimal("0.00"), code
+        # ...and they explain why, so €0 isn't mistaken for a bug.
+        assert profile.headline_note, f"{code} should carry a headline_note"

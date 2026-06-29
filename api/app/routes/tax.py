@@ -51,6 +51,8 @@ def get_tax_summary(
     dividend_tax = tax_summary.estimate_dividend_tax(profile, annual_dividend)
 
     notes: list[str] = []
+    if profile.headline_note:
+        notes.append(profile.headline_note)
     if profile.code == "DE" and etf_share_pct > 0:
         notes.append(
             f"German Teilfreistellung applied: 30% of gains on the {etf_share_pct:.0f}% ETF "
