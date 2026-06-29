@@ -15,6 +15,36 @@ from app.config import get_settings
 log = logging.getLogger(__name__)
 
 _scheduler = None
+# Held-open connection carrying the Postgres advisory lock (None until acquired).
+_lock_conn = None
+# Arbitrary stable key (year+month of the feature) shared across all instances.
+_ADVISORY_LOCK_KEY = 202607
+
+
+def _acquire_singleton_lock() -> bool:
+    """Ensure only one instance runs the scheduler.
+
+    On Postgres, take a session-level advisory lock on a held-open connection;
+    the lock lives as long as that connection stays open (the process lifetime).
+    On non-Postgres (sqlite dev/tests) there's only ever one process, so allow it.
+    """
+    global _lock_conn
+    from app.db import engine
+
+    if engine.dialect.name != "postgresql":
+        return True
+
+    from sqlalchemy import text
+
+    conn = engine.connect()
+    got = conn.execute(
+        text("SELECT pg_try_advisory_lock(:k)"), {"k": _ADVISORY_LOCK_KEY}
+    ).scalar()
+    if not got:
+        conn.close()
+        return False
+    _lock_conn = conn  # keep open so the lock is held for this process
+    return True
 
 
 def _run_weekly() -> None:
@@ -43,6 +73,10 @@ def start():
     if _scheduler is not None:
         return _scheduler
 
+    if not _acquire_singleton_lock():
+        log.info("scheduler lock held by another instance — not starting here")
+        return None
+
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
@@ -67,7 +101,17 @@ def start():
 
 
 def shutdown() -> None:
-    global _scheduler
+    global _scheduler, _lock_conn
     if _scheduler is not None:
         _scheduler.shutdown(wait=False)
         _scheduler = None
+    if _lock_conn is not None:
+        try:
+            from sqlalchemy import text
+
+            _lock_conn.execute(
+                text("SELECT pg_advisory_unlock(:k)"), {"k": _ADVISORY_LOCK_KEY}
+            )
+        finally:
+            _lock_conn.close()
+            _lock_conn = None
