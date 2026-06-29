@@ -35,7 +35,14 @@ anthropic>=0.40,<1
 # --- Billing (Stripe subscriptions; only used when STRIPE_API_KEY is set) ---
 stripe>=11,<13
 
-# --- Dev / test ---
+# --- Live connectors (Pro; lazy-imported, dormant until keys are configured) ---
+# httpx (below): crypto address indexer calls. cryptography: encrypt exchange API
+# secrets at rest. ccxt: read-only exchange balance reads. The exchange connector
+# stays disabled unless these are installed AND the relevant keys are set.
+cryptography>=42
+ccxt>=4.4,<5
+
+# --- Dev / test (httpx also powers the address connector at runtime) ---
 pytest>=8.3
 pytest-asyncio>=0.24
 httpx>=0.28

@@ -51,6 +51,19 @@ class Settings(BaseSettings):
 
     demo_user_id: int = 1
 
+    # --- Crypto address sync (read-only on-chain balances) ---
+    # Live, Pro-only. Empty key → address sync disabled (endpoints return 503),
+    # like the LLM/email/billing tiers. base_url + response mapping target the
+    # chosen indexer (e.g. Zerion / Covalent / Alchemy) — see services/connectors.
+    crypto_indexer_api_key: str = ""
+    crypto_indexer_base_url: str = "https://api.example-indexer.com/v1"
+
+    # --- Exchange API sync (read-only keys via CCXT) ---
+    # Fernet key (base64, 32 bytes) used to encrypt stored exchange API secrets at
+    # rest. Generate with: python -c "from cryptography.fernet import Fernet;
+    # print(Fernet.generate_key().decode())". Empty → exchange sync disabled (503).
+    connection_secret_key: str = ""
+
     # --- Billing (Stripe) ---
     # Use a RESTRICTED key (rk_…) with least privilege, never a secret key in source.
     # Empty → billing disabled (endpoints return 503), like the LLM/email tiers.

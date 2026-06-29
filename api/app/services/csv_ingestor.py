@@ -1,5 +1,11 @@
 """CSV ingestor with auto-detected broker format.
 
+The CSV-specific concern here is *parsing*: detect the broker layout, map raw
+headers to canonical columns, and turn each row into a `CanonicalTransaction`.
+The provider-agnostic *replay/persist* step (average-cost pool → Positions +
+Lots, holdings-cap enforcement) lives in `services/connectors/base.py` and is
+shared with the live connectors. CSV is simply the first `ImportSource`.
+
 Supported formats:
 
   1. Sunday's normalised columns (legacy):
@@ -16,10 +22,6 @@ Transaction types handled (EU average-cost method):
                If no ratio is available it's flagged for review, not guessed.
   - DIVIDEND → does not affect holdings (cash event); counted, not stored.
 
-Per-position state is derived by replaying that ticker's transactions in date
-order over a (quantity, total_cost) pool, then writing quantity + avg_cost_eur.
-For buys-only this reproduces the previous weighted-average exactly.
-
 The ingestor strips PII columns (broker_account_id, iban, name, etc.) by simply
 not reading them. Asset class is inferred from ISIN prefix + symbol when not
 explicitly provided (TR exports don't include it).
@@ -32,19 +34,30 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 from io import StringIO
+from typing import TYPE_CHECKING
 
 from sqlalchemy.orm import Session
 
-from app.models import Lot, Portfolio, Position
+from app.models import Portfolio
 from app.schemas import IngestResult
 
-KIND_BUY = "buy"
-KIND_SELL = "sell"
-KIND_DIVIDEND = "dividend"
-KIND_SPLIT = "split"
-_HOLDING_KINDS = {KIND_BUY, KIND_SELL}
+if TYPE_CHECKING:
+    from app.models import Connection
+from app.services.connectors.base import (
+    _HOLDING_KINDS,
+    ALLOWED_ASSET_CLASSES,
+    KIND_BUY,
+    KIND_DIVIDEND,
+    KIND_SELL,
+    KIND_SPLIT,
+    ApplyResult,
+    CanonicalTransaction,
+    HoldingsLimitExceeded,
+    apply_transactions,
+)
 
-ALLOWED_ASSET_CLASSES = {"stock", "etf", "crypto", "cash"}
+# Re-exported so existing callers (routes/ingest.py, tests) keep working.
+__all__ = ["HoldingsLimitExceeded", "ingest_csv", "preview_csv"]
 
 # Header aliases. Lowercased + stripped before matching.
 HEADER_ALIASES: dict[str, set[str]] = {
@@ -73,48 +86,15 @@ ETF_ISIN_PREFIXES = ("IE", "LU")  # Most UCITS ETFs are Irish or Luxembourg domi
 
 
 @dataclass
-class ParsedRow:
-    date: datetime
-    kind: str
-    ticker: str
-    isin: str | None
-    asset_class: str
-    quantity: Decimal  # magnitude (>= 0); 0 when not applicable (e.g. dividend)
-    unit_price_eur: Decimal
-    fees_eur: Decimal
-    split_ratio: Decimal | None
-
-
-class HoldingsLimitExceeded(Exception):
-    """Raised when an import would push a free portfolio past its holdings cap."""
-
-    def __init__(self, limit: int, attempted: int) -> None:
-        self.limit = limit
-        self.attempted = attempted
-        super().__init__(
-            f"Free plan allows {limit} holdings; this import would result in {attempted}."
-        )
-
-
-@dataclass
 class IngestionContext:
+    """Parse-time state: warnings, rows seen, and the detected broker format.
+
+    Replay/persist counts (sells/splits/etc.) now come from `ApplyResult`.
+    """
+
     warnings: list[str] = field(default_factory=list)
     rows_read: int = 0
-    positions_created: int = 0
-    positions_updated: int = 0
-    lots_created: int = 0
-    sells_applied: int = 0
-    dividends_seen: int = 0
-    splits_applied: int = 0
     detected_format: str = "unknown"
-
-
-@dataclass
-class _Pool:
-    """A position's average-cost pool: total quantity and total cost basis."""
-
-    qty: Decimal
-    total_cost: Decimal
 
 
 def _normalise_header(raw: str) -> str:
@@ -223,7 +203,7 @@ def _row_get(row: dict[str, str], column_map: dict[str, str], canonical: str) ->
 
 def _parse_row(
     row: dict[str, str], column_map: dict[str, str], ctx: IngestionContext
-) -> ParsedRow | None:
+) -> CanonicalTransaction | None:
     date_raw = _row_get(row, column_map, "date")
     type_raw = _row_get(row, column_map, "type")
     ticker_raw = _row_get(row, column_map, "ticker")
@@ -276,7 +256,7 @@ def _parse_row(
     else:
         asset_class = _infer_asset_class(ticker_raw, isin)
 
-    return ParsedRow(
+    return CanonicalTransaction(
         date=date,
         kind=kind,
         ticker=ticker_raw.strip().upper(),
@@ -289,100 +269,14 @@ def _parse_row(
     )
 
 
-def _build_position_index(portfolio: Portfolio) -> dict[str, Position]:
-    return {p.ticker: p for p in portfolio.positions}
-
-
-def _get_or_create_position(
-    db: Session,
-    portfolio: Portfolio,
-    rows: list[ParsedRow],
-    index: dict[str, Position],
-) -> tuple[Position, bool]:
-    ticker = rows[0].ticker
-    existing = index.get(ticker)
-    if existing is not None:
-        # Backfill ISIN if we now know it.
-        for r in rows:
-            if r.isin and not existing.isin:
-                existing.isin = r.isin
-                break
-        return existing, False
-
-    first = rows[0]
-    pos = Position(
-        portfolio_id=portfolio.id,
-        ticker=ticker,
-        isin=next((r.isin for r in rows if r.isin), None),
-        asset_class=first.asset_class,
-        currency="EUR",
-    )
-    db.add(pos)
-    db.flush()  # populate pos.id for lot FK
-    portfolio.positions.append(pos)
-    index[ticker] = pos
-    return pos, True
-
-
-def _seed_pool(position: Position) -> _Pool:
-    qty = position.quantity or Decimal("0")
-    avg = position.avg_cost_eur or Decimal("0")
-    return _Pool(qty=qty, total_cost=qty * avg)
-
-
-def _apply(pool: _Pool, row: ParsedRow, ctx: IngestionContext) -> None:
-    if row.kind == KIND_BUY:
-        pool.qty += row.quantity
-        pool.total_cost += row.quantity * row.unit_price_eur + row.fees_eur
-        return
-
-    if row.kind == KIND_SELL:
-        if pool.qty <= 0:
-            ctx.warnings.append(
-                f"SELL_IGNORED: {row.ticker} — sell of {row.quantity} but no holdings"
-            )
-            return
-        sell_qty = min(row.quantity, pool.qty)
-        avg = pool.total_cost / pool.qty
-        pool.total_cost -= sell_qty * avg  # remove at avg → avg unchanged (EU method)
-        pool.qty -= sell_qty
-        ctx.sells_applied += 1
-        if row.quantity > sell_qty:
-            ctx.warnings.append(
-                f"SELL_CLAMPED: {row.ticker} — sold {row.quantity} but only {sell_qty} held"
-            )
-        return
-
-    if row.kind == KIND_SPLIT:
-        if row.split_ratio and row.split_ratio > 0:
-            pool.qty *= row.split_ratio  # total_cost unchanged → avg /= ratio
-            ctx.splits_applied += 1
-        else:
-            ctx.warnings.append(
-                f"SPLIT_FLAGGED: {row.ticker} — split detected but no ratio; review holdings"
-            )
-        return
-
-    if row.kind == KIND_DIVIDEND:
-        ctx.dividends_seen += 1  # cash event; does not affect holdings
-
-
-def _finalize_position(position: Position, pool: _Pool) -> None:
-    position.quantity = pool.qty.quantize(Decimal("0.00000001"))
-    if pool.qty > 0:
-        position.avg_cost_eur = (pool.total_cost / pool.qty).quantize(Decimal("0.0001"))
-    # On a fully-closed position, keep the last avg cost for reference; qty 0
-    # makes its value zero in pnl.
-
-
-def _summary_warning(ctx: IngestionContext) -> str | None:
+def _summary_warning(applied: ApplyResult) -> str | None:
     parts = []
-    if ctx.sells_applied:
-        parts.append(f"{ctx.sells_applied} sell(s) applied")
-    if ctx.dividends_seen:
-        parts.append(f"{ctx.dividends_seen} dividend row(s) recorded (no holdings change)")
-    if ctx.splits_applied:
-        parts.append(f"{ctx.splits_applied} split(s) applied")
+    if applied.sells_applied:
+        parts.append(f"{applied.sells_applied} sell(s) applied")
+    if applied.dividends_seen:
+        parts.append(f"{applied.dividends_seen} dividend row(s) recorded (no holdings change)")
+    if applied.splits_applied:
+        parts.append(f"{applied.splits_applied} split(s) applied")
     return "; ".join(parts) if parts else None
 
 
@@ -483,6 +377,7 @@ def ingest_csv(
     portfolio: Portfolio,
     raw_csv: str,
     max_holdings: int | None = None,
+    connection: Connection | None = None,
 ) -> IngestResult:
     ctx = IngestionContext()
     reader = csv.DictReader(StringIO(raw_csv))
@@ -510,66 +405,29 @@ def ingest_csv(
             ],
         )
 
-    # Parse every row first, grouping by ticker (preserve first-seen order).
-    groups: dict[str, list[ParsedRow]] = {}
+    # Parse every row into canonical transactions (parse warnings collect in ctx).
+    txns: list[CanonicalTransaction] = []
     for row in reader:
         ctx.rows_read += 1
         parsed = _parse_row(row, column_map, ctx)
         if parsed is None:
             continue
-        groups.setdefault(parsed.ticker, []).append(parsed)
+        txns.append(parsed)
 
-    index = _build_position_index(portfolio)
+    # Shared replay/persist (raises HoldingsLimitExceeded + rolls back on cap).
+    applied = apply_transactions(
+        db,
+        portfolio,
+        txns,
+        source_label=ctx.detected_format,
+        connection=connection,
+        max_holdings=max_holdings,
+    )
 
-    for ticker, rows in groups.items():
-        existing = index.get(ticker)
-        has_holding = any(r.kind in _HOLDING_KINDS for r in rows)
-        if existing is None and not has_holding:
-            kinds = ", ".join(sorted({r.kind for r in rows}))
-            ctx.warnings.append(
-                f"SKIPPED: {ticker} — {kinds} with no buy/holding to attach to"
-            )
-            continue
-
-        pos, created = _get_or_create_position(db, portfolio, rows, index)
-
-        holding_rows = [r for r in rows if r.kind in _HOLDING_KINDS]
-        if created:
-            ctx.positions_created += 1
-            ctx.positions_updated += max(len(holding_rows) - 1, 0)
-        else:
-            ctx.positions_updated += len(holding_rows)
-
-        pool = _seed_pool(pos)
-        for r in sorted(rows, key=lambda x: x.date):
-            if r.kind == KIND_BUY:
-                lot = Lot(
-                    position_id=pos.id,
-                    purchased_at=r.date,
-                    quantity=r.quantity,
-                    unit_cost_eur=r.unit_price_eur,
-                    fees_eur=r.fees_eur,
-                    source=ctx.detected_format,
-                )
-                pos.lots.append(lot)
-                db.add(lot)
-                ctx.lots_created += 1
-            _apply(pool, r, ctx)
-
-        _finalize_position(pos, pool)
-
-    # Enforce the holdings cap before persisting, so a free user never lands a
-    # partial import. `index` holds every position touched plus the pre-existing ones.
-    if max_holdings is not None:
-        held = sum(1 for p in index.values() if p.quantity is not None and p.quantity > 0)
-        if held > max_holdings:
-            db.rollback()
-            raise HoldingsLimitExceeded(max_holdings, held)
-
-    db.commit()
-
-    warnings = ctx.warnings
-    summary = _summary_warning(ctx)
+    # Warning order matches the previous single-pass build: parse warnings, then
+    # apply warnings, with the summary and detected-format banner prepended.
+    warnings = [*ctx.warnings, *applied.warnings]
+    summary = _summary_warning(applied)
     if summary:
         warnings = [summary, *warnings]
     if ctx.detected_format != "sunday_native":
@@ -577,8 +435,8 @@ def ingest_csv(
 
     return IngestResult(
         rows_read=ctx.rows_read,
-        positions_created=ctx.positions_created,
-        positions_updated=ctx.positions_updated,
-        lots_created=ctx.lots_created,
+        positions_created=applied.positions_created,
+        positions_updated=applied.positions_updated,
+        lots_created=applied.lots_created,
         warnings=warnings,
     )

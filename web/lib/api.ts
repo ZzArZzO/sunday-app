@@ -4,6 +4,8 @@ import type {
   ChatGrounding,
   ChatMessage,
   ChatResponse,
+  ConnectionListResponse,
+  ConnectionSyncResult,
   DeliveryPreferences,
   DeliveryResult,
   DividendResponse,
@@ -226,9 +228,10 @@ export async function sendChatStream(
   }
 }
 
-export async function uploadCsv(file: File): Promise<IngestResult> {
+export async function uploadCsv(file: File, broker?: string): Promise<IngestResult> {
   const formData = new FormData();
   formData.append("file", file);
+  if (broker) formData.append("broker", broker);
   return http<IngestResult>("/api/ingest", {
     method: "POST",
     body: formData,
@@ -242,4 +245,58 @@ export async function previewCsv(file: File): Promise<IngestPreviewResponse> {
     method: "POST",
     body: formData,
   });
+}
+
+// --- Connections (import sources) ----------------------------------------
+
+export async function fetchConnections(): Promise<ConnectionListResponse> {
+  return http<ConnectionListResponse>("/api/connections");
+}
+
+/** Connect a read-only public wallet address (Pro). */
+export async function connectAddress(
+  address: string,
+  label?: string,
+): Promise<ConnectionSyncResult> {
+  return http<ConnectionSyncResult>("/api/connections/address", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ address, label }),
+  });
+}
+
+/** Connect a read-only exchange API key (Pro). */
+export async function connectExchange(
+  exchange: string,
+  apiKey: string,
+  apiSecret: string,
+  label?: string,
+): Promise<ConnectionSyncResult> {
+  return http<ConnectionSyncResult>("/api/connections/exchange", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ exchange, api_key: apiKey, api_secret: apiSecret, label }),
+  });
+}
+
+/** Re-sync a live source (address/exchange). */
+export async function syncConnection(id: number): Promise<ConnectionSyncResult> {
+  return http<ConnectionSyncResult>(`/api/connections/${id}/sync`, { method: "POST" });
+}
+
+/** Disconnect a source and drop its holdings (204 No Content). */
+export async function disconnectConnection(id: number): Promise<void> {
+  const headers: Record<string, string> = {};
+  const token = getAuthToken();
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const res = await fetch(`${getApiUrl()}/api/connections/${id}`, {
+    method: "DELETE",
+    cache: "no-store",
+    credentials: "include",
+    headers,
+  });
+  if (!res.ok) {
+    const detail = await res.text();
+    throw new Error(`API ${res.status} DELETE /api/connections/${id}: ${detail}`);
+  }
 }

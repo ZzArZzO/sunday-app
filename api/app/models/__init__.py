@@ -1,5 +1,6 @@
 from app.models.auth import MagicToken, UserSession
 from app.models.briefing import Briefing
+from app.models.connection import Connection
 from app.models.llm_call_log import LlmCallLog
 from app.models.lot import Lot
 from app.models.portfolio import Portfolio
@@ -14,6 +15,7 @@ __all__ = [
     "Position",
     "Lot",
     "Briefing",
+    "Connection",
     "PortfolioSnapshot",
     "MagicToken",
     "UserSession",

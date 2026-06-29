@@ -1,19 +1,19 @@
 import Link from "next/link";
 
-import { CsvUploader } from "@/components/CsvUploader";
 import { Disclaimer } from "@/components/Disclaimer";
+import { ImportWizard } from "@/components/ImportWizard";
 
 export default function UploadPage() {
   return (
     <div className="space-y-12 fade-up">
       <header className="space-y-3">
-        <p className="label">Step 1 of 1</p>
+        <p className="label">Bring your portfolio in</p>
         <h1 className="font-sans text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
-          Bring your portfolio in
+          Pick your broker to start
         </h1>
         <p className="max-w-prose text-base leading-relaxed text-ink-muted">
-          Export your position history from your broker as CSV and drop it in. The file is parsed
-          in place. We keep tickers, quantities, dates, and cost basis — nothing else.
+          We&apos;ll show you exactly where to find the export. The file is parsed in place — we keep
+          tickers, quantities, dates, and cost basis, nothing else. No broker login required.
         </p>
         <p className="text-sm text-ink-muted">
           Want to look around first?{" "}
@@ -23,7 +23,7 @@ export default function UploadPage() {
         </p>
       </header>
 
-      <CsvUploader />
+      <ImportWizard />
 
       <section className="grid gap-4 sm:grid-cols-2">
         <article className="card p-5">

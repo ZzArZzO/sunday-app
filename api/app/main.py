@@ -8,6 +8,7 @@ from app.routes import (
     billing,
     briefing,
     chat,
+    connections,
     delivery,
     dividend,
     events,
@@ -58,6 +59,7 @@ app.include_router(delivery.router)
 app.include_router(auth.router)
 app.include_router(billing.router)
 app.include_router(push.router)
+app.include_router(connections.router)
 
 
 @app.on_event("startup")
