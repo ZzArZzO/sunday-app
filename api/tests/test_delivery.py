@@ -73,6 +73,13 @@ class TestEmailRender:
         email = email_render.render_briefing_email(_briefing(wow_available=False))
         assert "Week-over-week starts once your history builds" in email.html
 
+    def test_ai_act_disclosure_present(self):
+        # EU AI Act Art. 50: visible disclosure + machine-readable marker, in both parts.
+        email = email_render.render_briefing_email(_briefing())
+        assert "generated with AI assistance" in email.html
+        assert "<!-- ai-generated: true -->" in email.html
+        assert "Generated with AI assistance" in email.text
+
 
 class TestPdfRender:
     def test_renders_a_valid_pdf(self):
@@ -92,6 +99,11 @@ class TestPdfRender:
     def test_no_history_variant_renders(self):
         pdf = pdf_render.render_briefing_pdf(_briefing(wow_available=False))
         assert pdf[:5] == b"%PDF-"
+
+    def test_ai_act_disclosure_in_metadata_and_body(self):
+        # EU AI Act Art. 50: AI-assisted marking in the PDF metadata and a visible line.
+        pdf = pdf_render.render_briefing_pdf(_briefing())
+        assert b"AI assistance" in pdf  # Creator metadata + body line
 
 
 class TestSenderDryRun:

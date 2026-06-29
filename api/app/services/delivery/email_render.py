@@ -55,6 +55,12 @@ def render_briefing_email(briefing: BriefingResponse) -> RenderedEmail:
         )
     sections_html = "\n".join(section_blocks)
     disclaimers_html = " · ".join(briefing.disclaimers)
+    # EU AI Act Art. 50: visible AI disclosure + machine-readable marker.
+    ai_disclosure_html = (
+        f"<p style='margin:6px 0 0;color:{_MUTED}'>This briefing was generated with AI "
+        f"assistance (Claude by Anthropic). Information only, not investment advice.</p>"
+        "<!-- ai-generated: true -->"
+    )
 
     html = f"""\
 <div style="margin:0;padding:24px 0;background:{_BG};font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif">
@@ -76,6 +82,7 @@ def render_briefing_email(briefing: BriefingResponse) -> RenderedEmail:
     </div>
     <div style="padding:18px 28px 26px;border-top:1px solid #efeae0;font-size:12px;color:{_MUTED};line-height:1.5">
       {disclaimers_html}
+      {ai_disclosure_html}
     </div>
   </div>
   <div style="max-width:560px;margin:14px auto 0;text-align:center;font-size:12px;color:{_MUTED}">
@@ -98,6 +105,9 @@ def render_briefing_email(briefing: BriefingResponse) -> RenderedEmail:
         text_lines.append(markdown_lite.to_text(s.body_markdown))
         text_lines.append("")
     text_lines.append("— " + disclaimers_html)
+    text_lines.append(
+        "Generated with AI assistance (Claude by Anthropic). Information only, not investment advice."
+    )
     text = "\n".join(text_lines)
 
     return RenderedEmail(subject=subject, html=html, text=text)

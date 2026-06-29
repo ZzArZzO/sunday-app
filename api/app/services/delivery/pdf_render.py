@@ -98,6 +98,11 @@ def _render_body(pdf: FPDF, markdown: str) -> None:
 def render_briefing_pdf(briefing: BriefingResponse) -> bytes:
     """Render the briefing to PDF bytes (starts with the %PDF- magic header)."""
     pdf = FPDF(format="A4")
+    # EU AI Act Art. 50: mark the document as AI-assisted in its metadata.
+    pdf.set_title("Sunday Portfolio Briefing")
+    pdf.set_author("Sunday")
+    pdf.set_creator("Sunday - generated with AI assistance (Claude by Anthropic)")
+    pdf.set_keywords("ai-generated portfolio-briefing")
     pdf.set_auto_page_break(auto=True, margin=18)
     pdf.set_margins(18, 18, 18)
     pdf.add_page()
@@ -140,5 +145,6 @@ def render_briefing_pdf(briefing: BriefingResponse) -> bytes:
     pdf.set_font("Helvetica", "", 8)
     pdf.set_text_color(*_MUTED)
     _line(pdf, 4.4, " · ".join(briefing.disclaimers))
+    _line(pdf, 4.4, "Generated with AI assistance (Claude by Anthropic). Information only.")
 
     return bytes(pdf.output())

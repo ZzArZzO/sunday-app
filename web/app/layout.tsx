@@ -65,6 +65,17 @@ export default function RootLayout({ children }: { children: ReactNode }) {
               Sunday is information, not advice. Numbers are computed deterministically; the
               narrative sections are generated with AI assistance.
             </p>
+            <nav className="mt-3 flex gap-4">
+              <a href="/terms" className="hover:underline">
+                Terms
+              </a>
+              <a href="/privacy" className="hover:underline">
+                Privacy
+              </a>
+              <a href="/impressum" className="hover:underline">
+                Impressum
+              </a>
+            </nav>
           </footer>
         </BiometricGate>
       </body>
