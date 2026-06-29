@@ -11,7 +11,8 @@ RUN addgroup --system appuser && adduser --system --ingroup appuser appuser
 COPY --chown=appuser:appuser . .
 
 COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
+# Strip any CR (Windows checkouts) so the shebang resolves to /bin/sh, not /bin/sh\r.
+RUN sed -i 's/\r$//' /entrypoint.sh && chmod +x /entrypoint.sh
 
 USER appuser
 
