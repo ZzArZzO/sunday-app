@@ -49,7 +49,7 @@ def send_email(
         return SendResult(to=to, ok=True, dry_run=True)
 
     payload: dict[str, object] = {
-        "from": settings.email_from,
+        "from": settings.email_from_validated,
         "to": [to],
         "subject": subject,
         "html": html,

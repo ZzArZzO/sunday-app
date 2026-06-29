@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_db
+from app.rate_limit import rate_limit
 from app.schemas.auth import (
     ExchangeRequest,
     ExchangeResponse,
@@ -47,7 +48,11 @@ def _magic_email_html(link: str) -> str:
     )
 
 
-@router.post("/request", response_model=MagicLinkResponse)
+@router.post(
+    "/request",
+    response_model=MagicLinkResponse,
+    dependencies=[Depends(rate_limit("5/minute", "auth_request"))],
+)
 def request_magic_link(
     body: MagicLinkRequest,
     db: Session = Depends(get_db),
@@ -73,7 +78,7 @@ def request_magic_link(
     )
 
 
-@router.get("/verify")
+@router.get("/verify", dependencies=[Depends(rate_limit("10/minute", "auth_verify"))])
 def verify(
     token: str,
     db: Session = Depends(get_db),

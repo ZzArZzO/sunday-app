@@ -43,13 +43,22 @@ class Settings(BaseSettings):
     # --- Auth ---
     # Public URL of the API itself (magic links point here). The web app is app_base_url.
     api_base_url: str = "http://localhost:8000"
-    # When False (dev), routes fall back to the demo user if there's no session.
-    # Set True in production so unauthenticated requests get 401.
-    auth_required: bool = False
+    # When False, routes fall back to the demo user if there's no session.
+    # Defaults True (secure-by-default); set AUTH_REQUIRED=false in a local .env
+    # for single-user dev without signing in.
+    auth_required: bool = True
     # Set True when serving the cookie over HTTPS (production).
     cookie_secure: bool = False
 
     demo_user_id: int = 1
+
+    # --- Rate limiting (auth endpoints) ---
+    # Disable for tests/benchmarks that hammer the auth routes over HTTP.
+    rate_limit_enabled: bool = True
+
+    # --- Error tracking (Sentry) ---
+    # Empty → Sentry disabled (no-op), like the other optional integrations.
+    sentry_dsn: str = ""
 
     # --- Billing (Stripe) ---
     # Use a RESTRICTED key (rk_…) with least privilege, never a secret key in source.
@@ -69,6 +78,18 @@ class Settings(BaseSettings):
     @property
     def cors_origins_list(self) -> list[str]:
         return [origin.strip() for origin in self.api_cors_origins.split(",") if origin.strip()]
+
+    @property
+    def email_from_validated(self) -> str:
+        """email_from, with a loud warning if it's still the placeholder domain."""
+        if "example.com" in self.email_from:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "EMAIL_FROM contains 'example.com' — emails will bounce. "
+                "Set a verified sender domain before production."
+            )
+        return self.email_from
 
 
 @lru_cache

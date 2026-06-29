@@ -20,9 +20,14 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV HOSTNAME=0.0.0.0
 
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
+# Run as an unprivileged user.
+RUN addgroup -S appuser && adduser -S appuser -G appuser
+
+COPY --chown=appuser:appuser --from=builder /app/public ./public
+COPY --chown=appuser:appuser --from=builder /app/.next/standalone ./
+COPY --chown=appuser:appuser --from=builder /app/.next/static ./.next/static
+
+USER appuser
 
 EXPOSE 3000
 
