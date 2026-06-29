@@ -29,6 +29,9 @@ services:
       API_PORT: "8000"
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Secure by default; set AUTH_REQUIRED=false in your local .env to use the
+      # demo-user fallback (no sign-in) for local exploration.
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       FMP_API_KEY: ${FMP_API_KEY:-}
       STRIPE_API_KEY: ${STRIPE_API_KEY:-}
