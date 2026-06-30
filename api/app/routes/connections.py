@@ -91,15 +91,15 @@ def connect_address(
             detail="Crypto address sync isn't configured on this server.",
         )
 
-    address = body.address.strip()
-    if not crypto_address.is_valid_evm_address(address):
+    normalized = crypto_address.normalize_address(body.address)
+    if normalized is None:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="That doesn't look like a public wallet address (0x… expected).",
+            detail="That doesn't look like a public wallet address (EVM 0x… or a Solana address expected).",
         )
+    addr, _chain = normalized  # EVM lowercased; Solana base58 left case-sensitive
 
     portfolio = _portfolio_for(db, user)
-    addr = address.lower()
     conn = next(
         (c for c in portfolio.connections if c.kind == "address" and c.config.get("address") == addr),
         None,

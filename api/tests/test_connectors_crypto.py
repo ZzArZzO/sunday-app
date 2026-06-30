@@ -46,10 +46,54 @@ def _addr_conn(db: Session, portfolio: Portfolio, address: str) -> Connection:
     return conn
 
 
+_SOL_ADDR = "So11111111111111111111111111111111111111112"  # wrapped SOL mint (43 chars)
+
+
 def test_evm_address_validation() -> None:
     assert ca.is_valid_evm_address("0x" + "a" * 40)
     assert not ca.is_valid_evm_address("0x123")
     assert not ca.is_valid_evm_address("not-an-address")
+
+
+def test_solana_address_validation() -> None:
+    assert ca.is_valid_solana_address(_SOL_ADDR)
+    assert not ca.is_valid_solana_address("0x" + "a" * 40)  # EVM, not base58
+    assert not ca.is_valid_solana_address("tooshort")
+    assert not ca.is_valid_solana_address("0OIl" + "1" * 40)  # excluded base58 chars
+
+
+def test_normalize_address_lowercases_evm_keeps_solana_case() -> None:
+    evm = "0x" + "aB" * 20  # 40 hex chars, mixed case
+    norm, chain = ca.normalize_address(evm)
+    assert chain == "evm"
+    assert norm == evm.lower()
+
+    norm, chain = ca.normalize_address(_SOL_ADDR)
+    assert chain == "solana"
+    assert norm == _SOL_ADDR  # case-sensitive, returned verbatim
+
+    assert ca.normalize_address("not-an-address") is None
+    assert ca.is_valid_address(_SOL_ADDR)
+
+
+def test_parse_zerion_maps_positions_and_skips_bad_rows() -> None:
+    payload = {
+        "data": [
+            {
+                "attributes": {
+                    "quantity": {"float": 1.5},
+                    "price": 1500.0,
+                    "fungible_info": {"symbol": "eth", "name": "Ethereum"},
+                }
+            },
+            {"attributes": {"quantity": {"float": 9}, "fungible_info": {}}},  # no symbol → skip
+            {"attributes": {"fungible_info": {"symbol": "SOL"}}},  # no quantity → skip
+        ]
+    }
+    out = ca._parse_zerion(payload)
+    assert [b.symbol for b in out] == ["ETH"]
+    assert out[0].quantity == Decimal("1.5")
+    assert out[0].price_eur == Decimal("1500.0")
 
 
 def test_short_address() -> None:
