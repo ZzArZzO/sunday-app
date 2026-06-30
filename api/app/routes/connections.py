@@ -117,7 +117,7 @@ def connect_address(
 
     try:
         result = crypto_address.sync_address(
-            db, portfolio, conn, provider=provider, max_holdings=subscription.holdings_limit(user)
+            db, portfolio, conn, provider=provider, tx_provider=crypto_address.get_tx_provider(), max_holdings=subscription.holdings_limit(user)
         )
     except HoldingsLimitExceeded as exc:
         raise HTTPException(
@@ -207,7 +207,7 @@ def sync_connection(
             )
         try:
             result = crypto_address.sync_address(
-                db, portfolio, conn, provider=provider, max_holdings=subscription.holdings_limit(user)
+                db, portfolio, conn, provider=provider, tx_provider=crypto_address.get_tx_provider(), max_holdings=subscription.holdings_limit(user)
             )
         except HoldingsLimitExceeded as exc:
             raise HTTPException(

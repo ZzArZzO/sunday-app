@@ -5,6 +5,7 @@ the snapshot→canonical-transaction translation, and live re-sync (replace) +
 error handling, which is what the route relies on.
 """
 
+from datetime import datetime, timezone
 from decimal import Decimal
 
 import pytest
@@ -12,6 +13,14 @@ from sqlalchemy.orm import Session
 
 from app.models import Connection, Lot, Portfolio, User
 from app.services.connectors import crypto_address as ca
+
+
+class FakeTxProvider:
+    def __init__(self, history: dict) -> None:
+        self._history = history
+
+    def fetch_transactions(self, address: str) -> dict:
+        return self._history
 
 
 class FakeProvider:
@@ -164,3 +173,98 @@ def test_sync_marks_connection_error_on_failure(db: Session) -> None:
 
     assert conn.status == "error"
     assert conn.error_detail is not None
+
+
+def test_parse_zerion_transactions_maps_transfers() -> None:
+    payload = {
+        "data": [
+            {
+                "attributes": {
+                    "mined_at": "2024-06-01T12:00:00Z",
+                    "transfers": [
+                        {
+                            "direction": "in",
+                            "fungible_info": {"symbol": "eth"},
+                            "quantity": {"float": 2.0},
+                            "price": 1500.0,
+                        },
+                        {
+                            "direction": "out",
+                            "fungible_info": {"symbol": "usdc"},
+                            "quantity": {"float": 3000.0},
+                        },
+                    ],
+                }
+            },
+            {
+                "attributes": {
+                    "mined_at": 1700000000,  # unix epoch form
+                    "transfers": [
+                        {
+                            "direction": "in",
+                            "fungible_info": {"symbol": "ETH"},
+                            "quantity": {"float": 1.0},
+                        },
+                        {  # non-in/out direction → skipped
+                            "direction": "self",
+                            "fungible_info": {"symbol": "ETH"},
+                            "quantity": {"float": 9.0},
+                        },
+                    ],
+                }
+            },
+        ]
+    }
+    hist = ca._parse_zerion_transactions(payload)
+    assert set(hist) == {"ETH", "USDC"}
+    assert len(hist["ETH"]) == 2  # the "self" transfer was dropped
+    assert hist["ETH"][0].acquire is True
+    assert hist["ETH"][0].quantity == Decimal("2.0")
+    assert hist["ETH"][0].unit_price_eur == Decimal("1500.0")
+    assert hist["USDC"][0].acquire is False
+
+
+def test_sync_with_tx_provider_dates_lots(db: Session) -> None:
+    portfolio = _seed(db)
+    conn = _addr_conn(db, portfolio, "0x" + "a" * 40)
+    history = {
+        "ETH": [
+            ca.LedgerEvent(datetime(2023, 1, 1, tzinfo=timezone.utc), True, Decimal("2"), Decimal("1000")),
+            ca.LedgerEvent(datetime(2024, 6, 1, tzinfo=timezone.utc), True, Decimal("3"), Decimal("1500")),
+        ]
+    }
+
+    ca.sync_address(
+        db,
+        portfolio,
+        conn,
+        provider=FakeProvider([ca.TokenBalance("ETH", Decimal("5"), Decimal("1600"))]),
+        tx_provider=FakeTxProvider(history),
+    )
+
+    eth = next(p for p in portfolio.positions if p.ticker == "ETH")
+    assert eth.quantity == Decimal("5.00000000")
+    lots = db.query(Lot).filter(Lot.connection_id == conn.id).order_by(Lot.purchased_at).all()
+    assert [lot.purchased_at.date().isoformat() for lot in lots] == ["2023-01-01", "2024-06-01"]
+    assert [lot.quantity for lot in lots] == [Decimal("2"), Decimal("3")]
+
+
+def test_sync_tx_history_failure_falls_back_to_snapshot(db: Session) -> None:
+    portfolio = _seed(db)
+    conn = _addr_conn(db, portfolio, "0x" + "a" * 40)
+
+    class BoomTx:
+        def fetch_transactions(self, address: str) -> dict:
+            raise RuntimeError("history down")
+
+    ca.sync_address(
+        db,
+        portfolio,
+        conn,
+        provider=FakeProvider([ca.TokenBalance("ETH", Decimal("4"), Decimal("1600"))]),
+        tx_provider=BoomTx(),
+    )
+
+    eth = next(p for p in portfolio.positions if p.ticker == "ETH")
+    assert eth.quantity == Decimal("4.00000000")  # snapshot fallback still holds
+    assert conn.status == "active"  # a tx-history failure is non-fatal

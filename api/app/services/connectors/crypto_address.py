@@ -14,11 +14,17 @@ single `ZerionBalanceProvider` covers both — Zerion's `/positions` endpoint
 routes by address, so one vendor + one call serves every launch chain. The
 generic `HttpBalanceProvider` is kept as a vendor-agnostic fallback (set
 `CRYPTO_INDEXER_PROVIDER=http` to use it).
+
+When a `ZerionTransactionProvider` is supplied, each token's balance is split
+into its real acquisition lots (FIFO, via `lot_history`) so the crypto tax
+holding-period clock has true purchase dates. Without it, or on a history fetch
+failure, the connector falls back to a single `now`-dated snapshot lot.
 """
 
 from __future__ import annotations
 
 import base64
+import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -34,19 +40,29 @@ from app.services.connectors.base import (
     ConnectorNotConfigured,
     replace_connection_lots,
 )
+from app.services.connectors.lot_history import (
+    LedgerEvent,
+    balances_to_dated_transactions,
+)
 from app.services.connectors.snapshot import (
     TokenBalance,
     snapshot_to_transactions,
     to_decimal,
 )
 
+log = logging.getLogger(__name__)
+
 __all__ = [
     "TokenBalance",
+    "LedgerEvent",
     "AddressConnector",
     "BalanceProvider",
     "HttpBalanceProvider",
     "ZerionBalanceProvider",
+    "TransactionProvider",
+    "ZerionTransactionProvider",
     "get_provider",
+    "get_tx_provider",
     "is_valid_address",
     "is_valid_evm_address",
     "is_valid_solana_address",
@@ -216,6 +232,103 @@ def get_provider() -> BalanceProvider | None:
     return ZerionBalanceProvider(settings.crypto_indexer_base_url, settings.crypto_indexer_api_key)
 
 
+@runtime_checkable
+class TransactionProvider(Protocol):
+    """Reads a wallet's transfer history, grouped by token symbol, for FIFO lot
+    reconstruction. Optional — absence means snapshot-only (no real lot dates)."""
+
+    def fetch_transactions(self, address: str) -> dict[str, list[LedgerEvent]]: ...
+
+
+class ZerionTransactionProvider:
+    """Reads transfer history from the Zerion API for FIFO lot dating.
+
+        GET {base_url}/wallets/{address}/transactions/?currency=eur
+
+    Each transaction has a ``mined_at`` time and a list of ``transfers``; a
+    transfer's ``direction`` (``in``/``out``) is the acquire/dispose signal.
+    """
+
+    def __init__(self, base_url: str, api_key: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
+
+    def _auth_header(self) -> str:
+        token = base64.b64encode(f"{self._api_key}:".encode()).decode()
+        return f"Basic {token}"
+
+    def fetch_transactions(self, address: str) -> dict[str, list[LedgerEvent]]:
+        try:
+            import httpx
+        except ImportError as exc:  # pragma: no cover - httpx is installed
+            raise ConnectorNotConfigured("httpx is required for address sync") from exc
+
+        resp = httpx.get(
+            f"{self._base_url}/wallets/{address}/transactions/",
+            params={"currency": "eur", "page[size]": 100},
+            headers={"Authorization": self._auth_header(), "accept": "application/json"},
+            timeout=20.0,
+        )
+        resp.raise_for_status()
+        return _parse_zerion_transactions(resp.json())
+
+
+def _zerion_timestamp(value: object) -> datetime | None:
+    """Parse Zerion ``mined_at`` (a unix epoch or an ISO-8601 string) → UTC."""
+    if isinstance(value, (int, float)):
+        return datetime.fromtimestamp(value, tz=timezone.utc)
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00"))
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_zerion_transactions(payload: dict) -> dict[str, list[LedgerEvent]]:
+    """Map a Zerion ``/transactions`` response → {symbol: [LedgerEvent]}.
+
+    One event per fungible transfer; ``direction`` in/out drives acquire/dispose.
+    Rows without a symbol, quantity, or parseable time are skipped.
+    """
+    history: dict[str, list[LedgerEvent]] = {}
+    for item in payload.get("data", []):
+        attrs = item.get("attributes", {}) if isinstance(item, dict) else {}
+        date = _zerion_timestamp(attrs.get("mined_at"))
+        if date is None:
+            continue
+        for transfer in attrs.get("transfers", []) or []:
+            info = transfer.get("fungible_info") or {}
+            symbol = str(info.get("symbol", "")).strip().upper()
+            qty = to_decimal((transfer.get("quantity") or {}).get("float"))
+            direction = str(transfer.get("direction", "")).strip().lower()
+            if not symbol or qty is None or qty <= 0 or direction not in ("in", "out"):
+                continue
+            history.setdefault(symbol, []).append(
+                LedgerEvent(
+                    date=date,
+                    acquire=(direction == "in"),
+                    quantity=qty,
+                    unit_price_eur=to_decimal(transfer.get("price")),
+                )
+            )
+    return history
+
+
+def get_tx_provider() -> TransactionProvider | None:
+    """The configured transaction provider, or None when unavailable.
+
+    Only Zerion supplies history; the generic ``http`` indexer doesn't, so the
+    connector stays on snapshot dating there.
+    """
+    settings = get_settings()
+    if not settings.crypto_indexer_api_key:
+        return None
+    if (settings.crypto_indexer_provider or "zerion").strip().lower() != "zerion":
+        return None
+    return ZerionTransactionProvider(settings.crypto_indexer_base_url, settings.crypto_indexer_api_key)
+
+
 @dataclass
 class AddressConnector:
     """An `ImportSource` over a public wallet address."""
@@ -234,18 +347,35 @@ def sync_address(
     connection: Connection,
     *,
     provider: BalanceProvider,
+    tx_provider: TransactionProvider | None = None,
     max_holdings: int | None = None,
 ) -> ApplyResult:
     """Fetch the address's current balances and replace this connection's holdings.
 
-    On a provider/parse failure the connection is marked `error` (so the UI can
-    surface it) and the exception re-raised for the route to translate.
+    With a `tx_provider`, each token is split into FIFO-reconstructed lots so the
+    tax holding-period clock has real purchase dates; without it (or if history
+    fetch fails) it falls back to a single `now`-dated snapshot lot. A
+    provider/parse failure on the *balance* read marks the connection `error` and
+    re-raises for the route to translate.
     """
     address = str(connection.config.get("address", ""))
-    connector = AddressConnector(address=address, provider=provider)
 
     try:
-        txns = connector.fetch()
+        balances = provider.fetch_balances(address)
+        if tx_provider is None:
+            txns = snapshot_to_transactions(balances)
+        else:
+            now = datetime.now(timezone.utc)
+            try:
+                history = tx_provider.fetch_transactions(address)
+            except Exception as exc:  # noqa: BLE001 - history is best-effort
+                log.warning(
+                    "Transaction history failed for %s (using snapshot dates): %s",
+                    short_address(address),
+                    exc,
+                )
+                history = {}
+            txns = balances_to_dated_transactions(balances, history, now=now)
     except Exception as exc:
         connection.status = "error"
         connection.error_detail = str(exc)[:500]
