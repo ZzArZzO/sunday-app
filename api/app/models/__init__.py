@@ -8,6 +8,7 @@ from app.models.portfolio_snapshot import PortfolioSnapshot
 from app.models.position import Position
 from app.models.push_token import PushToken
 from app.models.user import User
+from app.models.weekly_delivery import WeeklyDelivery
 
 __all__ = [
     "User",
@@ -21,4 +22,5 @@ __all__ = [
     "UserSession",
     "LlmCallLog",
     "PushToken",
+    "WeeklyDelivery",
 ]

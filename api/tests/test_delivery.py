@@ -6,7 +6,7 @@ conversion (incl. escaping), the email render, and the dry-run sender.
 
 from decimal import Decimal
 
-from app.models import User
+from app.models import User, WeeklyDelivery
 from app.schemas import BriefingResponse, BriefingSection
 from app.schemas.portfolio import DualMoney
 from app.services.delivery import briefing_delivery, email_render, markdown_lite, pdf_render, sender
@@ -136,3 +136,15 @@ class TestWeeklyOptIn:
 
         assert summary.total == 0
         assert summary.sent == 0 and summary.failed == 0
+
+    def test_deliver_weekly_skips_already_delivered_this_week(self, db):
+        # A delivery already recorded for this ISO week must be skipped (idempotency).
+        u = User(email="pro@test.com", weekly_opt_in=True, subscription_status="active")
+        db.add(u)
+        db.commit()
+        db.add(WeeklyDelivery(user_id=u.id, iso_week=briefing_delivery._current_iso_week()))
+        db.commit()
+
+        summary = briefing_delivery.deliver_weekly(db)
+
+        assert summary.total == 0
