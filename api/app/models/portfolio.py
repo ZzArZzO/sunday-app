@@ -23,3 +23,7 @@ class Portfolio(Base):
         cascade="all, delete-orphan",
         order_by="PortfolioSnapshot.as_of",
     )
+    connections: Mapped[list["Connection"]] = relationship(  # noqa: F821
+        back_populates="portfolio",
+        cascade="all, delete-orphan",
+    )

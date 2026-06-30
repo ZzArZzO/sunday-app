@@ -16,7 +16,7 @@ type State =
   | { kind: "done"; result: IngestResult }
   | { kind: "error"; message: string };
 
-export function CsvUploader() {
+export function CsvUploader({ broker }: { broker?: string }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const [dragging, setDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -34,7 +34,7 @@ export function CsvUploader() {
   async function confirmImport(file: File, preview: IngestPreviewResponse) {
     setState({ kind: "importing", preview });
     try {
-      const result = await uploadCsv(file);
+      const result = await uploadCsv(file, broker);
       setState({ kind: "done", result });
     } catch (err) {
       setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });

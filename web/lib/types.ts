@@ -318,3 +318,25 @@ export type Subscription = {
   status: string | null;
   current_period_end: string | null;
 };
+
+// Connections — mirrors api/app/schemas/connection.py.
+export type ConnectionKind = "manual" | "csv" | "address" | "exchange";
+
+export type Connection = {
+  id: number;
+  kind: ConnectionKind;
+  label: string;
+  status: "active" | "error" | "disconnected";
+  last_synced_at: string | null;
+  error_detail: string | null;
+};
+
+export type ConnectionListResponse = {
+  connections: Connection[];
+};
+
+export type ConnectionSyncResult = {
+  connection: Connection;
+  positions_synced: number;
+  warnings: string[];
+};

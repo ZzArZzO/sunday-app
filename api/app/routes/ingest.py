@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_user
-from app.models import Portfolio, User
+from app.models import Connection, Portfolio, User
 from app.schemas import IngestResult
 from app.schemas.ingest_preview import (
     IngestPreviewResponse,
@@ -16,6 +18,25 @@ from app.services.billing import subscription
 router = APIRouter(prefix="/api/ingest", tags=["ingest"])
 
 MAX_CSV_BYTES = 2 * 1024 * 1024  # 2 MB
+
+
+def _get_or_create_csv_connection(
+    db: Session, portfolio: Portfolio, broker: str | None
+) -> Connection:
+    """One csv-type Connection per broker label, so re-uploading the same broker's
+    export updates that source rather than spawning duplicates."""
+    label = (broker or "CSV import").strip()[:120] or "CSV import"
+    conn = next(
+        (c for c in portfolio.connections if c.kind == "csv" and c.label == label),
+        None,
+    )
+    if conn is None:
+        conn = Connection(portfolio_id=portfolio.id, kind="csv", label=label)
+        db.add(conn)
+        db.flush()
+        portfolio.connections.append(conn)
+    conn.last_synced_at = datetime.now(timezone.utc)
+    return conn
 
 
 async def _read_csv_text(file: UploadFile) -> str:
@@ -56,6 +77,7 @@ async def preview_csv(
 @router.post("", response_model=IngestResult)
 async def upload_csv(
     file: UploadFile = File(...),
+    broker: str | None = Form(None),
     user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> IngestResult:
@@ -68,9 +90,15 @@ async def upload_csv(
         db.flush()
         user.portfolios.append(portfolio)
 
+    connection = _get_or_create_csv_connection(db, portfolio, broker)
+
     try:
         return csv_ingestor.ingest_csv(
-            db, portfolio, text, max_holdings=subscription.holdings_limit(user)
+            db,
+            portfolio,
+            text,
+            max_holdings=subscription.holdings_limit(user),
+            connection=connection,
         )
     except csv_ingestor.HoldingsLimitExceeded as exc:
         raise HTTPException(
