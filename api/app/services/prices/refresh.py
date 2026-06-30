@@ -38,8 +38,10 @@ class RefreshResult:
     warnings: list[str] = field(default_factory=list)
 
 
-def _quote_for(provider: PriceProvider, position: Position) -> Quote | None:
-    for symbol in symbols.candidate_symbols(position):
+def _quote_for(
+    provider: PriceProvider, position: Position, isin_map: dict[str, str] | None = None
+) -> Quote | None:
+    for symbol in symbols.candidate_symbols(position, isin_map=isin_map):
         quote = provider.get_quote(symbol)
         if quote is not None:
             return quote
@@ -52,12 +54,13 @@ def price_positions(
     *,
     eur_usd_rate: Decimal,
     cross_rates: dict[str, Decimal] | None = None,
+    isin_map: dict[str, str] | None = None,
     now: datetime,
 ) -> RefreshResult:
     result = RefreshResult(total=len(positions))
 
     for p in positions:
-        quote = _quote_for(provider, p)
+        quote = _quote_for(provider, p, isin_map)
         if quote is None:
             result.unpriced += 1
             if not p.ticker:

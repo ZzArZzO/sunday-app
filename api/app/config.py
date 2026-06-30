@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     ai_monthly_budget_free_usd: float = 0.25
     ai_monthly_budget_pro_usd: float = 5.0
     fmp_api_key: str = ""
+    # OpenFIGI maps ISIN → market symbol so ISIN-only holdings (DEGIRO) can price.
+    # Works without a key (rate-limited); a key raises the limits + batch size.
+    openfigi_api_key: str = ""
 
     # Email delivery (Resend). Empty key → dry-run (render but don't send).
     resend_api_key: str = ""
