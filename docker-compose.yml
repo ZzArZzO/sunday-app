@@ -29,6 +29,9 @@ services:
       API_PORT: "8000"
       API_CORS_ORIGINS: ${API_CORS_ORIGINS:-http://localhost:3000}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # Secure by default; set AUTH_REQUIRED=false in your local .env to use the
+      # demo-user fallback (no sign-in) for local exploration.
+      AUTH_REQUIRED: ${AUTH_REQUIRED:-true}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       FMP_API_KEY: ${FMP_API_KEY:-}
       STRIPE_API_KEY: ${STRIPE_API_KEY:-}
@@ -62,6 +65,14 @@ services:
     depends_on:
       api:
         condition: service_healthy
+    healthcheck:
+      # 127.0.0.1, not localhost: the Next server binds IPv4 (0.0.0.0); localhost
+      # resolves to ::1 first in the container and the check would always fail.
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
 volumes:
   postgres_data:

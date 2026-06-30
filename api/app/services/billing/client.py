@@ -7,11 +7,14 @@ exactly one place. Never log the key.
 
 from __future__ import annotations
 
+import logging
 from types import ModuleType
 
 import stripe
 
 from app.config import get_settings
+
+log = logging.getLogger(__name__)
 
 
 class BillingNotConfigured(RuntimeError):
@@ -23,6 +26,13 @@ def get_stripe() -> ModuleType:
     if not settings.stripe_api_key:
         raise BillingNotConfigured(
             "STRIPE_API_KEY is not set. Billing is unavailable until it is configured."
+        )
+    if not settings.stripe_api_key.startswith(("rk_live_", "rk_test_")):
+        # Warn, don't fail — keeps an sk_test_ key working in dev, but flags the
+        # least-privilege expectation for production. Never log the key itself.
+        log.warning(
+            "STRIPE_API_KEY does not look like a restricted key (rk_…). "
+            "Use a restricted key in production."
         )
     stripe.api_key = settings.stripe_api_key
     return stripe
