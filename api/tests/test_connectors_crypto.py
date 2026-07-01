@@ -268,3 +268,70 @@ def test_sync_tx_history_failure_falls_back_to_snapshot(db: Session) -> None:
     eth = next(p for p in portfolio.positions if p.ticker == "ETH")
     assert eth.quantity == Decimal("4.00000000")  # snapshot fallback still holds
     assert conn.status == "active"  # a tx-history failure is non-fatal
+
+
+class _Resp:
+    def __init__(self, payload: object) -> None:
+        self._payload = payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def json(self) -> object:
+        return self._payload
+
+
+def test_zerion_balances_follow_pagination(monkeypatch) -> None:
+    import httpx
+
+    calls: list[str] = []
+    pages = [
+        {
+            "data": [
+                {"attributes": {"quantity": {"float": 2.0}, "price": 1500.0, "fungible_info": {"symbol": "ETH"}}}
+            ],
+            "links": {"next": "https://api.zerion.io/v1/wallets/x/positions/?page[after]=cur"},
+        },
+        {
+            "data": [
+                {"attributes": {"quantity": {"float": 0.5}, "price": 30000.0, "fungible_info": {"symbol": "BTC"}}}
+            ],
+            "links": {},
+        },
+    ]
+
+    def fake_get(url, params=None, headers=None, timeout=None):  # noqa: ANN001
+        calls.append(url)
+        return _Resp(pages[len(calls) - 1])
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    balances = ca.ZerionBalanceProvider("https://api.zerion.io/v1", "key").fetch_balances("0x" + "a" * 40)
+    assert len(calls) == 2  # followed links.next to page 2
+    assert {b.symbol for b in balances} == {"ETH", "BTC"}  # both pages collected
+
+
+def test_zerion_transactions_request_is_trash_filtered(monkeypatch) -> None:
+    import httpx
+
+    seen: dict = {}
+
+    def fake_get(url, params=None, headers=None, timeout=None):  # noqa: ANN001
+        seen["params"] = params
+        return _Resp({"data": [], "links": {}})
+
+    monkeypatch.setattr(httpx, "get", fake_get)
+
+    ca.ZerionTransactionProvider("https://api.zerion.io/v1", "key").fetch_transactions("0x" + "a" * 40)
+    assert seen["params"].get("filter[trash]") == "only_non_trash"  # matches /positions
+
+
+def test_parse_zerion_drops_non_finite_quantity() -> None:
+    payload = {
+        "data": [
+            {"attributes": {"quantity": {"float": float("nan")}, "fungible_info": {"symbol": "ETH"}}},
+            {"attributes": {"quantity": {"float": 2.0}, "price": 30000.0, "fungible_info": {"symbol": "BTC"}}},
+        ]
+    }
+    out = ca._parse_zerion(payload)
+    assert [b.symbol for b in out] == ["BTC"]  # NaN quantity dropped, not crashed on

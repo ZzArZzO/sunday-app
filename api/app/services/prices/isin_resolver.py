@@ -21,6 +21,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Protocol, runtime_checkable
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.config import get_settings
@@ -97,9 +98,15 @@ def _pick_symbol(isin: str, listings: list[dict]) -> str | None:
 
 @runtime_checkable
 class IsinMappingProvider(Protocol):
-    """Maps ISINs to yfinance symbols; returns only the ones it could resolve."""
+    """Maps ISINs to yfinance symbols.
 
-    def map_isins(self, isins: list[str]) -> dict[str, str]: ...
+    Returns ``(resolved, attempted)``: ``resolved`` is the {isin: symbol} it could
+    map, ``attempted`` is every isin it actually got a provider answer for. The
+    caller caches only ``attempted`` (as hit or miss), so ISINs left unanswered by
+    a partial failure are retried rather than cached as permanent misses.
+    """
+
+    def map_isins(self, isins: list[str]) -> tuple[dict[str, str], list[str]]: ...
 
 
 def _chunk(items: list[str], size: int) -> list[list[str]]:
@@ -119,31 +126,37 @@ class OpenFigiProvider:
         self._base_url = base_url.rstrip("/")
         self._batch_size = 100 if api_key else 10
 
-    def map_isins(self, isins: list[str]) -> dict[str, str]:
+    def map_isins(self, isins: list[str]) -> tuple[dict[str, str], list[str]]:
         try:
             import httpx
         except ImportError:  # pragma: no cover - httpx is installed
-            return {}
+            return {}, []
 
         headers = {"Content-Type": "application/json"}
         if self._api_key:
             headers["X-OPENFIGI-APIKEY"] = self._api_key
 
         out: dict[str, str] = {}
+        attempted: list[str] = []
         for batch in _chunk(isins, self._batch_size):
             jobs = [{"idType": "ID_ISIN", "idValue": isin} for isin in batch]
-            resp = httpx.post(
-                f"{self._base_url}/mapping", json=jobs, headers=headers, timeout=20.0
-            )
-            resp.raise_for_status()
-            for isin, result in zip(batch, resp.json(), strict=False):
+            try:
+                resp = httpx.post(
+                    f"{self._base_url}/mapping", json=jobs, headers=headers, timeout=20.0
+                )
+                resp.raise_for_status()
+                results = resp.json()
+            except Exception:  # noqa: BLE001 - a failed batch stops here; earlier batches stand
+                break
+            attempted.extend(batch)
+            for isin, result in zip(batch, results, strict=False):
                 listings = result.get("data") if isinstance(result, dict) else None
                 if not listings:
                     continue
                 symbol = _pick_symbol(isin, listings)
                 if symbol:
                     out[isin] = symbol
-        return out
+        return out, attempted
 
 
 def get_provider() -> IsinMappingProvider:
@@ -184,16 +197,26 @@ def resolve(
 
     prov = provider or get_provider()
     try:
-        mapped = prov.map_isins(misses)
+        mapped, attempted = prov.map_isins(misses)
     except Exception as exc:  # noqa: BLE001 - any failure must not break pricing
         log.warning("OpenFIGI resolve failed for %d ISIN(s): %s", len(misses), exc)
         return result  # transient failure: don't cache, retry next refresh
 
+    if not attempted:
+        return result
+
+    # Cache only the ISINs the provider actually answered (hit or miss); ones left
+    # unanswered by a partial failure stay uncached and are retried next refresh.
     now = datetime.now(timezone.utc)
-    for isin in misses:
+    for isin in attempted:
         symbol = mapped.get(isin)
         db.add(IsinSymbol(isin=isin, symbol=symbol, source="openfigi", resolved_at=now))
         if symbol:
             result[isin] = symbol
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent refresh cached these first; our resolved symbols (already in
+        # `result`) still stand, so degrade quietly instead of 500-ing the refresh.
+        db.rollback()
     return result

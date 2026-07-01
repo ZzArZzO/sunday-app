@@ -157,6 +157,39 @@ def _parse_balances(payload: dict) -> list[TokenBalance]:
     return out
 
 
+# Page through at most this many Zerion pages (100 rows each). A safety bound so
+# a pathological wallet can't loop forever; 50 pages = 5,000 rows.
+_MAX_ZERION_PAGES = 50
+
+
+def _zerion_paged_data(url: str, params: dict, headers: dict) -> list[dict]:
+    """Collect ``data`` across all Zerion pages, following ``links.next``.
+
+    Zerion caps a page at 100 rows and returns newest-first, so WITHOUT paging the
+    oldest rows (the original acquisitions, and holdings past the 100th) are
+    silently dropped — which would reset the tax clock. The ``next`` link is a full
+    URL that already encodes the cursor + params, so later requests send no params.
+    """
+    try:
+        import httpx
+    except ImportError as exc:  # pragma: no cover - httpx is installed
+        raise ConnectorNotConfigured("httpx is required for address sync") from exc
+
+    data: list[dict] = []
+    next_url: str | None = url
+    next_params: dict | None = params
+    for _ in range(_MAX_ZERION_PAGES):
+        if next_url is None:
+            break
+        resp = httpx.get(next_url, params=next_params, headers=headers, timeout=20.0)
+        resp.raise_for_status()
+        payload = resp.json()
+        data.extend(payload.get("data") or [])
+        next_url = (payload.get("links") or {}).get("next")
+        next_params = None  # the next link already carries currency/filters/cursor
+    return data
+
+
 class ZerionBalanceProvider:
     """Reads a wallet's current token balances from the Zerion API.
 
@@ -178,24 +211,17 @@ class ZerionBalanceProvider:
         return f"Basic {token}"
 
     def fetch_balances(self, address: str) -> list[TokenBalance]:
-        try:
-            import httpx
-        except ImportError as exc:  # pragma: no cover - httpx is installed
-            raise ConnectorNotConfigured("httpx is required for address sync") from exc
-
-        resp = httpx.get(
+        data = _zerion_paged_data(
             f"{self._base_url}/wallets/{address}/positions/",
-            params={
+            {
                 "currency": "eur",
                 "filter[positions]": "only_simple",  # wallet balances, not complex DeFi legs
                 "filter[trash]": "only_non_trash",  # drop spam/airdropped tokens
                 "page[size]": 100,
             },
-            headers={"Authorization": self._auth_header(), "accept": "application/json"},
-            timeout=20.0,
+            {"Authorization": self._auth_header(), "accept": "application/json"},
         )
-        resp.raise_for_status()
-        return _parse_zerion(resp.json())
+        return _parse_zerion({"data": data})
 
 
 def _parse_zerion(payload: dict) -> list[TokenBalance]:
@@ -258,19 +284,16 @@ class ZerionTransactionProvider:
         return f"Basic {token}"
 
     def fetch_transactions(self, address: str) -> dict[str, list[LedgerEvent]]:
-        try:
-            import httpx
-        except ImportError as exc:  # pragma: no cover - httpx is installed
-            raise ConnectorNotConfigured("httpx is required for address sync") from exc
-
-        resp = httpx.get(
+        data = _zerion_paged_data(
             f"{self._base_url}/wallets/{address}/transactions/",
-            params={"currency": "eur", "page[size]": 100},
-            headers={"Authorization": self._auth_header(), "accept": "application/json"},
-            timeout=20.0,
+            {
+                "currency": "eur",
+                "filter[trash]": "only_non_trash",  # match /positions; exclude spam transfers
+                "page[size]": 100,
+            },
+            {"Authorization": self._auth_header(), "accept": "application/json"},
         )
-        resp.raise_for_status()
-        return _parse_zerion_transactions(resp.json())
+        return _parse_zerion_transactions({"data": data})
 
 
 def _zerion_timestamp(value: object) -> datetime | None:
@@ -290,6 +313,12 @@ def _parse_zerion_transactions(payload: dict) -> dict[str, list[LedgerEvent]]:
 
     One event per fungible transfer; ``direction`` in/out drives acquire/dispose.
     Rows without a symbol, quantity, or parseable time are skipped.
+
+    History is keyed by token symbol, which matches how `/positions` aggregates a
+    fungible's balance across chains. The trash filter on the request excludes
+    impersonation/spam tokens that share a real symbol; the residual risk is two
+    *non-trash* assets with the same ticker merging — a rare correctness edge that
+    would need contract-level keying to fully close.
     """
     history: dict[str, list[LedgerEvent]] = {}
     for item in payload.get("data", []):

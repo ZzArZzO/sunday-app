@@ -50,6 +50,9 @@ def to_decimal(value: object) -> Decimal | None:
     if value is None:
         return None
     try:
-        return Decimal(str(value))
+        result = Decimal(str(value))
     except (InvalidOperation, ValueError):
         return None
+    # JSON allows NaN/Infinity tokens; they would slip past `is None` guards and
+    # blow up later at comparisons/quantize, so drop them here.
+    return result if result.is_finite() else None

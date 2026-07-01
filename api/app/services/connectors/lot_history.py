@@ -19,8 +19,16 @@ from decimal import Decimal
 from app.services.connectors.base import KIND_BUY, CanonicalTransaction
 from app.services.connectors.snapshot import TokenBalance
 
-# Position quantity is stored at 8 dp; ignore differences below that.
+# Reconciliation tolerance. Quantities come from JSON floats (~15-16 sig figs),
+# so for large-supply tokens (e.g. 1e9+ units) the absolute rounding error can
+# exceed a fixed 1e-8; scale the epsilon with the balance so a float-noise
+# residual doesn't spawn a phantom dust lot. Floor at the 8 dp the column stores.
 _QTY_EPS = Decimal("0.00000001")
+_QTY_REL_EPS = Decimal("1e-9")
+
+
+def _qty_tolerance(quantity: Decimal) -> Decimal:
+    return max(_QTY_EPS, abs(quantity) * _QTY_REL_EPS)
 
 
 @dataclass(frozen=True)
@@ -81,10 +89,11 @@ def reconstruct_held_lots(
     lots = [HeldLot(date=d, quantity=q, unit_price_eur=p) for d, q, p in queue if q > 0]
     total = sum((lot.quantity for lot in lots), Decimal("0"))
     diff = current_qty - total
+    eps = _qty_tolerance(current_qty)
 
-    if diff > _QTY_EPS:
+    if diff > eps:
         lots.append(HeldLot(date=now, quantity=diff, unit_price_eur=fallback_price))
-    elif diff < -_QTY_EPS:
+    elif diff < -eps:
         excess = -diff
         trimmed: list[HeldLot] = []
         for lot in lots:  # oldest first

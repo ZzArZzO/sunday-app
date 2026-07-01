@@ -86,6 +86,15 @@ def test_overshoot_trims_oldest_to_match_balance() -> None:
     assert [(lot.date, lot.quantity) for lot in lots] == [(_d(2024, 6, 1), Decimal("3"))]
 
 
+def test_large_supply_residual_does_not_spawn_phantom_lot() -> None:
+    # Balance 1e9; float-sourced history is off by ~1e-7 (> the old 1e-8 epsilon).
+    # The magnitude-relative tolerance absorbs it — no spurious "acquired today" lot.
+    events = [LedgerEvent(_d(2021, 1, 1), True, Decimal("999999999.9999999"), Decimal("0.00001"))]
+    lots = reconstruct_held_lots(events, current_qty=Decimal("1000000000"), now=NOW)
+    assert len(lots) == 1
+    assert lots[0].date == _d(2021, 1, 1)  # the real 2021 lot, not a now-dated dust lot
+
+
 def test_balances_to_dated_transactions_mixes_history_and_snapshot() -> None:
     balances = [
         TokenBalance("ETH", Decimal("5"), Decimal("1600")),
