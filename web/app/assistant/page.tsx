@@ -1,3 +1,4 @@
+import { AssistantExampleExchange } from "@/components/AssistantExampleExchange";
 import { ChatPanel } from "@/components/ChatPanel";
 
 export const metadata = {
@@ -8,7 +9,7 @@ export const metadata = {
 
 export default function AssistantPage() {
   return (
-    <div className="container-prose space-y-6">
+    <div className="container-prose space-y-8 fade-up">
       <header className="space-y-2">
         <p className="label">Assistant</p>
         <h1 className="font-sans text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
@@ -19,6 +20,7 @@ export default function AssistantPage() {
           what something means, or how an indicator works — in plain English.
         </p>
       </header>
+      <AssistantExampleExchange />
       <ChatPanel />
     </div>
   );

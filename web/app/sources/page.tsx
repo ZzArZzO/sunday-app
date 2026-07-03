@@ -10,8 +10,9 @@ export default function SourcesPage() {
           Sources
         </h1>
         <p className="max-w-prose text-base leading-relaxed text-ink-muted">
-          Everything feeding your portfolio in one place. Import broker CSVs, or connect a wallet or
-          exchange for live, read-only sync. Disconnect anything any time.
+          Everything feeding your portfolio in one place. Import a broker CSV, connect an Ethereum or
+          Solana wallet, or link an exchange like Bitvavo for live, read-only sync. Disconnect anything any
+          time.
         </p>
       </header>
 

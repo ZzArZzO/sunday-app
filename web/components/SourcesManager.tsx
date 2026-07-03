@@ -11,6 +11,7 @@ import {
   fetchSubscription,
   syncConnection,
 } from "@/lib/api";
+import { BROKERS } from "@/lib/brokers";
 import type { Connection, Subscription } from "@/lib/types";
 
 const KIND_LABEL: Record<Connection["kind"], string> = {
@@ -20,7 +21,17 @@ const KIND_LABEL: Record<Connection["kind"], string> = {
   exchange: "Exchange",
 };
 
-const EXCHANGES = ["kraken", "coinbase", "binance"];
+// Bitvavo first — the EUR-native EU leader this app is built around; Kraken,
+// Coinbase and Binance round out what EU retail actually uses. Mirrors
+// SUPPORTED_EXCHANGES in api/app/services/connectors/exchange.py.
+const EXCHANGES = ["bitvavo", "kraken", "coinbase", "binance"];
+
+const EXCHANGE_LABEL: Record<string, string> = {
+  bitvavo: "Bitvavo",
+  kraken: "Kraken",
+  coinbase: "Coinbase",
+  binance: "Binance",
+};
 
 function errorMessage(err: unknown): string {
   if (!(err instanceof Error)) return String(err);
@@ -140,9 +151,17 @@ export function SourcesManager() {
         <div className="grid gap-4 lg:grid-cols-3">
           <article className="card flex flex-col gap-2 p-5">
             <p className="font-medium text-ink">Broker CSV</p>
-            <p className="flex-1 text-sm text-ink-muted">
-              Stocks, ETFs and crypto from Trade Republic, Scalable, DEGIRO and more. No login.
-            </p>
+            <p className="text-sm text-ink-muted">Stocks, ETFs and crypto — no broker login required.</p>
+            <ul className="flex flex-1 flex-wrap gap-1.5">
+              {BROKERS.filter((b) => b.id !== "other").map((b) => (
+                <li
+                  key={b.id}
+                  className="rounded-full border border-rule bg-surface-2 px-2 py-0.5 text-xs text-ink-muted"
+                >
+                  {b.name}
+                </li>
+              ))}
+            </ul>
             <Link href="/upload" className="btn btn-primary mt-2 self-start">
               Import a CSV
             </Link>
@@ -167,8 +186,8 @@ export function SourcesManager() {
           />
         </div>
         <p className="text-xs text-ink-subtle">
-          Wallet and exchange sync are read-only — we read public balances, never private keys, and
-          can&apos;t move funds.
+          None of these need your broker login. Wallet and exchange sync are read-only — we read public
+          balances, never private keys, and can&apos;t move funds.
         </p>
       </section>
     </div>
@@ -275,14 +294,16 @@ function WalletForm({
   return (
     <article className="card flex flex-col gap-2 p-5">
       <p className="font-medium text-ink">Crypto wallet</p>
-      <p className="text-sm text-ink-muted">Paste a public address — read-only, no keys.</p>
+      <p className="text-sm text-ink-muted">
+        Paste a public address on Ethereum, its L2s, or Solana — read-only, no keys.
+      </p>
       {isPro ? (
         <form onSubmit={submit} className="mt-2 space-y-2">
           <input
             type="text"
             value={address}
             onChange={(e) => setAddress(e.target.value)}
-            placeholder="0x…"
+            placeholder="0x… or a Solana address"
             spellCheck={false}
             className="w-full rounded-md border border-rule bg-surface px-3 py-2 font-mono text-sm text-ink"
           />
@@ -340,7 +361,7 @@ function ExchangeForm({
           >
             {EXCHANGES.map((x) => (
               <option key={x} value={x}>
-                {x.charAt(0).toUpperCase() + x.slice(1)}
+                {EXCHANGE_LABEL[x] ?? x}
               </option>
             ))}
           </select>
