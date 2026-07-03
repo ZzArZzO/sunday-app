@@ -8,7 +8,10 @@ from app.db import Base
 from app.models import *  # noqa: F401, F403 — register models with Base.metadata
 
 config = context.config
-config.set_main_option("sqlalchemy.url", get_settings().database_url)
+# configparser treats "%" as its own interpolation syntax, so a URL-encoded
+# character in the DSN (e.g. a password containing "#" or "$") breaks
+# set_main_option unless literal "%" is escaped as "%%" first.
+config.set_main_option("sqlalchemy.url", get_settings().database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
