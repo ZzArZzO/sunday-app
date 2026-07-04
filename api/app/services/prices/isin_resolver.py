@@ -51,6 +51,11 @@ _EXCH_TO_YF_SUFFIX: dict[str, str] = {
     "ID": ".IR",  # Dublin
     "FH": ".HE",  # Helsinki
     "US": "", "UN": "", "UW": "", "UQ": "", "UR": "", "UP": "", "UA": "",
+    # Toronto Stock Exchange proper plus the ATS/alternative venues OpenFIGI
+    # reports separately for the same security (Chi-X Canada, TSX Alpha,
+    # Omega, etc.) — all resolve to the same yfinance ".TO" symbol.
+    "CN": ".TO", "CT": ".TO", "CJ": ".TO", "TR": ".TO", "TX": ".TO",
+    "TA": ".TO", "TG": ".TO", "TK": ".TO",
 }
 
 # Preferred yfinance suffix per ISIN country prefix (the holding's home venue).
@@ -59,7 +64,7 @@ _EXCH_TO_YF_SUFFIX: dict[str, str] = {
 _ISIN_COUNTRY_HOME: dict[str, str] = {
     "DE": ".DE", "NL": ".AS", "FR": ".PA", "IT": ".MI", "AT": ".VI",
     "CH": ".SW", "GB": ".L", "ES": ".MC", "PT": ".LS", "BE": ".BR",
-    "FI": ".HE", "US": "",
+    "FI": ".HE", "US": "", "CA": ".TO",
 }
 
 # EUR venues, in display/preference order (used when no country-home match).
@@ -81,16 +86,38 @@ def _score(suffix: str, home: str | None) -> int:
 
 
 def _pick_symbol(isin: str, listings: list[dict]) -> str | None:
-    """Choose the best yfinance symbol from OpenFIGI listings for one ISIN."""
+    """Choose the best yfinance symbol from OpenFIGI listings for one ISIN.
+
+    OpenFIGI sometimes lists the same ISIN under genuinely different ticker
+    symbols on different venues — not just "same ticker, different suffix"
+    but a different symbol string entirely (a Jersey-domiciled silver ETC
+    trades as PHAG on the LSE/Xetra-EUR venues but as VZLC on a smaller,
+    delisted German venue, for the same underlying ISIN). Scoring every
+    listing by venue alone, regardless of ticker, can pick a well-scored
+    venue's ticker that isn't the security's actual primary/liquid symbol —
+    that's exactly what picked VZLC.DE (delisted) over the correct PHAG.AS.
+    So: first find the ticker used by the most listings (the primary one),
+    then rank venues only within that ticker's own listings.
+    """
     home = _ISIN_COUNTRY_HOME.get(isin[:2].upper())
-    best: tuple[int, str] | None = None
+
+    by_ticker: dict[str, list[dict]] = {}
     for listing in listings:
         ticker = str(listing.get("ticker", "")).strip().upper()
         exch = str(listing.get("exchCode", "")).strip().upper()
         if not ticker or exch not in _EXCH_TO_YF_SUFFIX:
             continue
+        by_ticker.setdefault(ticker, []).append(listing)
+    if not by_ticker:
+        return None
+
+    primary_ticker = max(by_ticker, key=lambda t: len(by_ticker[t]))
+
+    best: tuple[int, str] | None = None
+    for listing in by_ticker[primary_ticker]:
+        exch = str(listing.get("exchCode", "")).strip().upper()
         suffix = _EXCH_TO_YF_SUFFIX[exch]
-        candidate = (_score(suffix, home), f"{ticker}{suffix}")
+        candidate = (_score(suffix, home), f"{primary_ticker}{suffix}")
         if best is None or candidate[0] < best[0]:
             best = candidate
     return best[1] if best is not None else None

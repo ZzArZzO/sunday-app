@@ -77,6 +77,32 @@ def test_pick_symbol_unknown_venue_returns_none() -> None:
     assert isin_resolver._pick_symbol("XX0000000000", [{"ticker": "FOO", "exchCode": "ZZ"}]) is None
 
 
+def test_pick_symbol_prefers_majority_ticker_over_better_scored_venue() -> None:
+    """Real bug, found live: a Jersey-domiciled silver ETC (JE00B1VS3333)
+    trades as PHAG on 7 EU venues but as VZLC on a delisted German one.
+    Scoring every listing by venue alone picked VZLC.DE (best-scored suffix,
+    but for a listing that doesn't actually quote) over the correct PHAG.AS."""
+    listings = [
+        {"ticker": "PHAG", "exchCode": "NA"},  # Amsterdam
+        {"ticker": "PHAG", "exchCode": "LN"},  # London
+        {"ticker": "PHAG", "exchCode": "SW"},  # SIX Swiss
+        {"ticker": "VZLC", "exchCode": "GR"},  # Xetra — best-scored suffix, wrong ticker
+    ]
+    assert isin_resolver._pick_symbol("JE00B1VS3333", listings) == "PHAG.AS"
+
+
+def test_pick_symbol_canadian_venues_resolve_to_toronto() -> None:
+    """Real bug, found live: Constellation Software (CA21037X1006) — OpenFIGI
+    reports it across several Canadian venue codes (main board + ATSs), none
+    of which were mapped, so it never priced at all."""
+    listings = [
+        {"ticker": "CSU", "exchCode": "CT"},
+        {"ticker": "CSU", "exchCode": "TR"},
+        {"ticker": "CNSWF", "exchCode": "US"},  # US OTC listing — not the primary one
+    ]
+    assert isin_resolver._pick_symbol("CA21037X1006", listings) == "CSU.TO"
+
+
 # --- resolve layering + caching --------------------------------------------
 
 
