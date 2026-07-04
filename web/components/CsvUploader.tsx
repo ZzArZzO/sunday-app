@@ -2,18 +2,22 @@
 
 import { useRef, useState } from "react";
 
-import { previewCsv, uploadCsv } from "@/lib/api";
-import type { IngestPreviewResponse, IngestResult, PreviewRowView } from "@/lib/types";
+import { previewCsv, refreshPrices, uploadCsv } from "@/lib/api";
+import type { IngestPreviewResponse, IngestResult, PreviewRowView, PriceRefreshResponse } from "@/lib/types";
 
 // Import wizard: Upload → Review (detected format, column mapping, per-row
 // status with skipped-row reasons) → Confirm. The preview never writes; confirm
-// reuses the existing /api/ingest endpoint.
+// reuses the existing /api/ingest endpoint. A freshly-imported position has no
+// price yet, so confirm also triggers a price refresh before showing "done" —
+// otherwise the dashboard would silently show cost basis dressed up as a
+// current value until someone happens to find the manual refresh button.
 type State =
   | { kind: "idle" }
   | { kind: "previewing" }
   | { kind: "preview"; file: File; preview: IngestPreviewResponse }
   | { kind: "importing"; preview: IngestPreviewResponse }
-  | { kind: "done"; result: IngestResult }
+  | { kind: "pricing"; result: IngestResult }
+  | { kind: "done"; result: IngestResult; priceRefresh: PriceRefreshResponse | null }
   | { kind: "error"; message: string };
 
 export function CsvUploader({ broker }: { broker?: string }) {
@@ -33,12 +37,25 @@ export function CsvUploader({ broker }: { broker?: string }) {
 
   async function confirmImport(file: File, preview: IngestPreviewResponse) {
     setState({ kind: "importing", preview });
+    let result: IngestResult;
     try {
-      const result = await uploadCsv(file, broker);
-      setState({ kind: "done", result });
+      result = await uploadCsv(file, broker);
     } catch (err) {
       setState({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      return;
     }
+
+    // The import itself succeeded regardless of what happens next — a price
+    // refresh failure (rate limit, a symbol Yahoo doesn't carry) shouldn't be
+    // reported as the import having failed.
+    setState({ kind: "pricing", result });
+    let priceRefresh: PriceRefreshResponse | null = null;
+    try {
+      priceRefresh = await refreshPrices();
+    } catch {
+      priceRefresh = null;
+    }
+    setState({ kind: "done", result, priceRefresh });
   }
 
   function reset() {
@@ -66,8 +83,12 @@ export function CsvUploader({ broker }: { broker?: string }) {
     return <p className="card p-6 text-sm text-ink-muted">Importing {state.preview.ok_count} rows…</p>;
   }
 
+  if (state.kind === "pricing") {
+    return <p className="card p-6 text-sm text-ink-muted">Imported. Fetching current prices…</p>;
+  }
+
   if (state.kind === "done") {
-    return <DoneStep result={state.result} onReset={reset} />;
+    return <DoneStep result={state.result} priceRefresh={state.priceRefresh} onReset={reset} />;
   }
 
   return (
@@ -269,7 +290,15 @@ function RowView({ row }: { row: PreviewRowView }) {
   );
 }
 
-function DoneStep({ result, onReset }: { result: IngestResult; onReset: () => void }) {
+function DoneStep({
+  result,
+  priceRefresh,
+  onReset,
+}: {
+  result: IngestResult;
+  priceRefresh: PriceRefreshResponse | null;
+  onReset: () => void;
+}) {
   return (
     <div className="space-y-4">
       <div role="status" aria-live="polite" className="rounded-md border border-positive/30 bg-positive-subtle/40 p-4 text-sm">
@@ -291,6 +320,30 @@ function DoneStep({ result, onReset }: { result: IngestResult; onReset: () => vo
           </div>
         ) : null}
       </div>
+
+      {priceRefresh ? (
+        <div className="rounded-md border border-rule bg-surface-2/50 p-4 text-sm">
+          <p className="font-medium text-ink">
+            {priceRefresh.priced} of {priceRefresh.total} holding{priceRefresh.total === 1 ? "" : "s"} priced
+          </p>
+          {priceRefresh.unpriced > 0 ? (
+            <p className="mt-1 text-ink-muted">
+              {priceRefresh.unpriced} couldn&apos;t be priced right now — some instruments (exotic
+              certificates, thinly-traded ETCs) aren&apos;t carried by our price data provider. Those
+              show your cost basis until a price is found; you can retry anytime from the Dashboard.
+            </p>
+          ) : null}
+        </div>
+      ) : (
+        <div className="rounded-md border border-warn/30 bg-warn-subtle/40 p-4 text-sm">
+          <p className="font-medium text-warn">Couldn&apos;t fetch prices just now</p>
+          <p className="mt-1 text-ink-muted">
+            Your import succeeded, but the price refresh didn&apos;t go through. Your holdings will
+            show cost basis until you retry — tap Refresh Prices on the Dashboard.
+          </p>
+        </div>
+      )}
+
       <button type="button" onClick={onReset} className="btn btn-ghost">
         Import another file
       </button>
