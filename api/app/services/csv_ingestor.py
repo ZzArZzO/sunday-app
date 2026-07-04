@@ -359,6 +359,16 @@ def _parse_row(
     else:
         asset_class = _infer_asset_class(ticker_raw, isin)
 
+    # Trade Republic's crypto rows invert the usual convention: `symbol`
+    # (mapped to isin) holds the actual short trading symbol ("ADA"), and
+    # `name` (mapped to ticker) holds the full name ("Cardano") -- unusable
+    # for pricing ("CARDANO-EUR" doesn't exist). Crypto has no ISIN, so
+    # anything shorter than a real 12-character ISIN here is really the
+    # symbol misfiled by the column map.
+    if asset_class == "crypto" and isin and len(isin) != 12:
+        ticker_raw = isin
+        isin = None
+
     return CanonicalTransaction(
         date=date,
         kind=kind,

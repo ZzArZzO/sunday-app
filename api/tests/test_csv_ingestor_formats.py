@@ -116,3 +116,22 @@ def test_trade_republic_v2_captures_isin_and_maps_fund_to_etf(db: Session) -> No
     assert fund.isin == "IE00B5BMR087"
     assert fund.asset_class == "etf"  # TR's "FUND" normalised to Sunday's "etf"
     assert result.positions_created == 2  # ASML + the fund
+
+
+def test_trade_republic_v2_crypto_uses_short_symbol_not_full_name(db: Session) -> None:
+    """TR's crypto rows invert the usual columns: `symbol` holds the actual
+    trading symbol ("ADA") and `name` holds the full name ("Cardano") -- the
+    opposite of stock rows, where `symbol` is the ISIN. Getting this backwards
+    means pricing tries to look up "CARDANO-EUR", which doesn't exist."""
+    portfolio = _seed(db)
+    csv_text = TR_V2_HEADER + (
+        '"2024-11-25T13:22:02Z","2024-11-25","DEFAULT","TRADING","BUY","CRYPTO","Cardano","ADA","51.513412","0.969777","-49.96","-1.00","","EUR","","","","","6","","","",""\n'
+    )
+
+    result = csv_ingestor.ingest_csv(db, portfolio, csv_text)
+
+    assert result.rows_read == 1
+    ada = portfolio.positions[0]
+    assert ada.ticker == "ADA"
+    assert ada.isin is None
+    assert ada.asset_class == "crypto"
