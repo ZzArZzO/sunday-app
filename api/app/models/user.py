@@ -11,7 +11,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    # unique=True already creates an index backing the constraint — index=True
+    # would add a second, redundant one covering the same column.
+    email: Mapped[str] = mapped_column(String(320), unique=True)
     # Supabase's auth.users.id (a UUID, stored as text — see supabase_jwt.py).
     # Nullable: the seeded demo user never signs in via Supabase and stays NULL.
     # No FK to auth.users — that's Supabase's vendor-managed schema.
