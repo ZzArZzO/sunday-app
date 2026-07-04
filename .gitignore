@@ -5,6 +5,12 @@
 *.pem
 *.key
 
+# Brainstorming visual-companion scratch (local-only mockups)
+.superpowers/
+
+# Claude Code personal/runtime state (settings.local.json, worktrees) — not shared config
+.claude/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -68,3 +74,4 @@ web/ios/App/App/capacitor.config.json
 web/android/app/google-services.json
 web/ios/App/App/GoogleService-Info.plist
 **/firebase-service-account*.json
+.vercel

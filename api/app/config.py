@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     ai_monthly_budget_free_usd: float = 0.25
     ai_monthly_budget_pro_usd: float = 5.0
     fmp_api_key: str = ""
+    # OpenFIGI maps ISIN → market symbol so ISIN-only holdings (DEGIRO) can price.
+    # Works without a key (rate-limited); a key raises the limits + batch size.
+    openfigi_api_key: str = ""
 
     # Email delivery (Resend). Empty key → dry-run (render but don't send).
     resend_api_key: str = ""
@@ -54,10 +57,12 @@ class Settings(BaseSettings):
 
     # --- Crypto address sync (read-only on-chain balances) ---
     # Live, Pro-only. Empty key → address sync disabled (endpoints return 503),
-    # like the LLM/email/billing tiers. base_url + response mapping target the
-    # chosen indexer (e.g. Zerion / Covalent / Alchemy) — see services/connectors.
+    # like the LLM/email/billing tiers. Default vendor is Zerion (one call covers
+    # EVM + Solana); set CRYPTO_INDEXER_PROVIDER=http for the generic fallback
+    # shape. See services/connectors/crypto_address.py.
     crypto_indexer_api_key: str = ""
-    crypto_indexer_base_url: str = "https://api.example-indexer.com/v1"
+    crypto_indexer_provider: str = "zerion"  # zerion | http
+    crypto_indexer_base_url: str = "https://api.zerion.io/v1"
 
     # --- Exchange API sync (read-only keys via CCXT) ---
     # Fernet key (base64, 32 bytes) used to encrypt stored exchange API secrets at

@@ -1,0 +1,82 @@
+# Production compose for the single Hetzner box: api + web + a Caddy reverse
+# proxy handling automatic HTTPS for both. No local Postgres — DATABASE_URL
+# points at the Supabase project. Run with:
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    container_name: sunday-api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      API_CORS_ORIGINS: ${API_CORS_ORIGINS}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      AUTH_REQUIRED: "true"
+      COOKIE_SECURE: "true"
+      ENABLE_SCHEDULER: ${ENABLE_SCHEDULER:-false}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      ANTHROPIC_REGION: eu
+      FMP_API_KEY: ${FMP_API_KEY:-}
+      OPENFIGI_API_KEY: ${OPENFIGI_API_KEY:-}
+      CRYPTO_INDEXER_API_KEY: ${CRYPTO_INDEXER_API_KEY:-}
+      CONNECTION_SECRET_KEY: ${CONNECTION_SECRET_KEY:-}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:-}
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: ${EMAIL_FROM}
+      APP_BASE_URL: ${APP_BASE_URL}
+      API_BASE_URL: ${API_BASE_URL}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${API_BASE_URL}
+    container_name: sunday-web
+    restart: unless-stopped
+    environment:
+      API_INTERNAL_URL: http://api:8000
+      NODE_ENV: production
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null 2>&1 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: sunday-caddy
+    restart: unless-stopped
+    environment:
+      WEB_DOMAIN: ${WEB_DOMAIN}
+      API_DOMAIN: ${API_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+      - web
+
+volumes:
+  caddy_data:
+  caddy_config:

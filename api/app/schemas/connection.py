@@ -24,7 +24,7 @@ class AddressConnectRequest(BaseModel):
 
 
 class ExchangeConnectRequest(BaseModel):
-    exchange: str  # kraken | coinbase | binance
+    exchange: str  # bitvavo | kraken | coinbase | binance
     api_key: str
     api_secret: str
     label: str | None = None

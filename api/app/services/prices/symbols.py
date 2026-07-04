@@ -42,8 +42,13 @@ def _dedup(symbols: list[str]) -> list[str]:
     return out
 
 
-def candidate_symbols(position) -> list[str]:
-    """Ordered yfinance symbols to try for this position."""
+def candidate_symbols(position, isin_map: dict[str, str] | None = None) -> list[str]:
+    """Ordered yfinance symbols to try for this position.
+
+    `isin_map` is an optional resolved ISIN→symbol map (DB cache / OpenFIGI) that
+    fills the long tail beyond the curated `ISIN_TICKER_MAP`. The curated map takes
+    precedence where both have an entry (it's hand-verified).
+    """
     if position.asset_class == "crypto":
         ticker = (position.ticker or "").strip().upper()
         return [f"{ticker}-EUR", f"{ticker}-USD"] if ticker else []
@@ -51,8 +56,9 @@ def candidate_symbols(position) -> list[str]:
     candidates: list[str] = []
 
     isin = (position.isin or "").strip().upper()
-    if isin and isin in ISIN_TICKER_MAP:
-        candidates.append(ISIN_TICKER_MAP[isin])
+    merged_isin_map = {**(isin_map or {}), **ISIN_TICKER_MAP}
+    if isin and isin in merged_isin_map:
+        candidates.append(merged_isin_map[isin])
 
     ticker = (position.ticker or "").strip().upper()
     if ticker in TICKER_OVERRIDES:

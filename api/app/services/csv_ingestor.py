@@ -30,6 +30,7 @@ explicitly provided (TR exports don't include it).
 from __future__ import annotations
 
 import csv
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
@@ -101,6 +102,14 @@ def _normalise_header(raw: str) -> str:
     return raw.strip().lower().replace("﻿", "")
 
 
+def _delimiter_for(raw_csv: str) -> str:
+    """Pick the column delimiter. DEGIRO (and some EU exports) use semicolons;
+    most others use commas. Decided from the header line so a comma inside a
+    quoted field doesn't flip the choice."""
+    header = raw_csv.lstrip("﻿").split("\n", 1)[0]
+    return ";" if header.count(";") > header.count(",") else ","
+
+
 def _alias_to_canonical(header: str) -> str | None:
     h = _normalise_header(header)
     for canonical, aliases in HEADER_ALIASES.items():
@@ -119,10 +128,51 @@ def _build_column_map(fieldnames: list[str]) -> dict[str, str]:
     return mapping
 
 
+# DEGIRO transactions export. No "Type" column: direction is the sign of
+# Quantity (+buy / -sell). No symbol either, so the Product name is the label and
+# the ISIN is the stable identifier. Price is in the instrument currency; Value
+# is in the account currency (EUR), so it gives the cleaner EUR unit cost.
+DEGIRO_HEADER_ALIASES: dict[str, set[str]] = {
+    "date": {"date", "datum"},
+    "ticker": {"product"},
+    "isin": {"isin"},
+    "quantity": {"quantity", "aantal"},  # SIGNED
+    "unit_price_eur": {"price", "koers"},  # instrument currency (fallback only)
+    "value_eur": {"value", "waarde"},  # account currency (EUR), signed
+    "fees_eur": {
+        "transaction and/or third party costs",
+        "transactiekosten en/of kosten derden",
+        "transaction costs",
+        "costs",
+    },
+}
+
+
+def _build_degiro_column_map(fieldnames: list[str]) -> dict[str, str]:
+    """Map raw DEGIRO headers → the canonical names `_parse_degiro_row` reads.
+
+    DEGIRO interleaves unnamed per-amount currency columns; those collapse to an
+    empty header and simply don't match any alias, so they're ignored.
+    """
+    mapping: dict[str, str] = {}
+    for raw in fieldnames:
+        h = _normalise_header(raw)
+        for canonical, aliases in DEGIRO_HEADER_ALIASES.items():
+            if h in aliases and canonical not in mapping.values():
+                mapping[raw] = canonical
+                break
+    return mapping
+
+
 def _detect_format(fieldnames: list[str]) -> str:
     normalised = {_normalise_header(h) for h in fieldnames}
     if {"date", "type", "ticker", "asset_class"}.issubset(normalised):
         return "sunday_native"
+    # DEGIRO: a "Product" column + ISIN, no "Type" (direction is the Quantity sign).
+    if {"product", "isin"}.issubset(normalised) and (
+        "quantity" in normalised or "aantal" in normalised
+    ):
+        return "degiro"
     if {"isin"}.issubset(normalised) and (
         "shares" in normalised or "stück" in normalised
     ):
@@ -173,6 +223,7 @@ def _parse_date(raw: str) -> datetime | None:
         "%Y-%m-%d %H:%M:%S",
         "%d.%m.%Y",
         "%d/%m/%Y",
+        "%d-%m-%Y",  # DEGIRO
         "%m/%d/%Y",
     )
     for fmt in formats:
@@ -269,6 +320,73 @@ def _parse_row(
     )
 
 
+def _parse_degiro_row(
+    row: dict[str, str], column_map: dict[str, str], ctx: IngestionContext
+) -> CanonicalTransaction | None:
+    """Parse one DEGIRO transactions row. Direction is the sign of Quantity."""
+    date_raw = _row_get(row, column_map, "date")
+    product_raw = _row_get(row, column_map, "ticker")
+    if not date_raw or not product_raw:
+        ctx.warnings.append("DEGIRO row missing date/product; skipping")
+        return None
+
+    qty_signed = _safe_decimal(
+        _row_get(row, column_map, "quantity") or "", field_name="quantity", ctx=ctx
+    )
+    if qty_signed is None or qty_signed == 0:
+        # Cash movements / currency conversions carry no quantity.
+        ctx.warnings.append(f"DEGIRO row for {product_raw!r} has no quantity; skipping")
+        return None
+    kind = KIND_BUY if qty_signed > 0 else KIND_SELL
+
+    date = _parse_date(date_raw)
+    if date is None:
+        ctx.warnings.append(f"unparseable date {date_raw!r}; skipping")
+        return None
+
+    isin = _row_get(row, column_map, "isin")
+    isin = isin.strip() if isin else None
+    if not isin:
+        isin = None
+
+    qty = abs(qty_signed)
+    # Prefer the EUR account-currency Value for unit cost; fall back to the
+    # instrument-currency Price (flagged) when Value is absent.
+    value_eur = _safe_decimal(
+        _row_get(row, column_map, "value_eur") or "", field_name="value", ctx=ctx
+    )
+    if value_eur is not None:
+        unit_price: Decimal | None = abs(value_eur) / qty
+    else:
+        price = _safe_decimal(
+            _row_get(row, column_map, "unit_price_eur") or "", field_name="price", ctx=ctx
+        )
+        unit_price = abs(price) if price is not None else None
+        if unit_price is not None:
+            ctx.warnings.append(
+                f"DEGIRO {product_raw!r}: no EUR value column, used Price (may be non-EUR)"
+            )
+
+    if kind == KIND_BUY and unit_price is None:
+        ctx.warnings.append(f"DEGIRO buy for {product_raw!r} has no price; skipping")
+        return None
+
+    fees = _safe_decimal(
+        _row_get(row, column_map, "fees_eur") or "0", field_name="fees", ctx=ctx
+    ) or Decimal("0")
+
+    return CanonicalTransaction(
+        date=date,
+        kind=kind,
+        ticker=product_raw.strip().upper(),
+        isin=isin,
+        asset_class=_infer_asset_class(product_raw, isin),
+        quantity=qty,
+        unit_price_eur=unit_price or Decimal("0"),
+        fees_eur=abs(fees),
+    )
+
+
 def _summary_warning(applied: ApplyResult) -> str | None:
     parts = []
     if applied.sells_applied:
@@ -313,6 +431,18 @@ class PreviewResult:
 
 _PREVIEW_ROW_CAP = 200
 
+# A row parser: (row, column_map, ctx) → CanonicalTransaction | None.
+RowParser = Callable[[dict[str, str], dict[str, str], IngestionContext], "CanonicalTransaction | None"]
+
+
+def _mapper_and_parser(detected: str, fieldnames: list[str]) -> tuple[dict[str, str], RowParser]:
+    """Pick the column map + row parser for a detected format. DEGIRO has no type
+    column (sign-based direction), so it uses a dedicated parser; everything else
+    shares the alias-driven `_parse_row`."""
+    if detected == "degiro":
+        return _build_degiro_column_map(fieldnames), _parse_degiro_row
+    return _build_column_map(fieldnames), _parse_row
+
 
 def preview_csv(raw_csv: str) -> PreviewResult:
     """Parse a CSV WITHOUT touching the DB — powers the import wizard's review step.
@@ -322,13 +452,13 @@ def preview_csv(raw_csv: str) -> PreviewResult:
     of committing anything.
     """
     ctx = IngestionContext()
-    reader = csv.DictReader(StringIO(raw_csv))
+    reader = csv.DictReader(StringIO(raw_csv), delimiter=_delimiter_for(raw_csv))
     fieldnames = list(reader.fieldnames or [])
     if not fieldnames:
         return PreviewResult("unknown", [], [], [], 0, 0, ["CSV has no header row"])
 
     detected = _detect_format(fieldnames)
-    column_map = _build_column_map(fieldnames)
+    column_map, parse = _mapper_and_parser(detected, fieldnames)
     data_rows = list(reader)
     first = data_rows[0] if data_rows else {}
 
@@ -343,7 +473,7 @@ def preview_csv(raw_csv: str) -> PreviewResult:
     ok = skipped = 0
     for line, row in enumerate(data_rows[:_PREVIEW_ROW_CAP], start=2):
         before = len(ctx.warnings)
-        parsed = _parse_row(row, column_map, ctx)
+        parsed = parse(row, column_map, ctx)
         if parsed is None:
             skipped += 1
             reason = ctx.warnings[-1] if len(ctx.warnings) > before else "skipped"
@@ -380,7 +510,7 @@ def ingest_csv(
     connection: Connection | None = None,
 ) -> IngestResult:
     ctx = IngestionContext()
-    reader = csv.DictReader(StringIO(raw_csv))
+    reader = csv.DictReader(StringIO(raw_csv), delimiter=_delimiter_for(raw_csv))
     fieldnames = list(reader.fieldnames or [])
     if not fieldnames:
         return IngestResult(
@@ -392,7 +522,7 @@ def ingest_csv(
         )
 
     ctx.detected_format = _detect_format(fieldnames)
-    column_map = _build_column_map(fieldnames)
+    column_map, parse = _mapper_and_parser(ctx.detected_format, fieldnames)
     if not column_map:
         return IngestResult(
             rows_read=0,
@@ -409,7 +539,7 @@ def ingest_csv(
     txns: list[CanonicalTransaction] = []
     for row in reader:
         ctx.rows_read += 1
-        parsed = _parse_row(row, column_map, ctx)
+        parsed = parse(row, column_map, ctx)
         if parsed is None:
             continue
         txns.append(parsed)

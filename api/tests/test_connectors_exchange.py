@@ -24,6 +24,8 @@ class FakeFetcher:
 def test_is_supported() -> None:
     assert ex.is_supported("kraken")
     assert ex.is_supported("Coinbase")
+    assert ex.is_supported("bitvavo")
+    assert ex.is_supported(" Bitvavo ")
     assert not ex.is_supported("ftx")
 
 

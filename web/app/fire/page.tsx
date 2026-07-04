@@ -1,32 +1,10 @@
-"use client";
-
 import { Disclaimer } from "@/components/Disclaimer";
 import { FireTimeline } from "@/components/FireTimeline";
-import { fetchFire } from "@/lib/api";
+import { FIRE_SNAPSHOT } from "@/lib/planSnapshot";
 import { formatDual, formatEur, formatPct } from "@/lib/format";
-import { useAsync } from "@/lib/useAsync";
 
 export default function FirePage() {
-  const { data: fire, loading, error } = useAsync(fetchFire);
-
-  if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="skeleton h-16 w-2/3" />
-        <div className="skeleton h-40 w-full" />
-      </div>
-    );
-  }
-
-  if (error || !fire) {
-    return (
-      <div className="card border-negative/30 bg-negative-subtle/40 p-5">
-        <p className="font-medium text-negative">Couldn&apos;t load FIRE planner</p>
-        <p className="mt-2 text-sm text-ink">{error}</p>
-      </div>
-    );
-  }
-
+  const fire = FIRE_SNAPSHOT;
   const progress = Number(fire.full_fire_progress_pct);
   const cappedProgress = Math.min(progress, 100);
   const yearsFull = fire.years_to_full_fire ? Number(fire.years_to_full_fire) : null;

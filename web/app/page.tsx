@@ -1,6 +1,10 @@
 import Link from "next/link";
 
 import { Disclaimer } from "@/components/Disclaimer";
+import { GainLossTag } from "@/components/GainLossTag";
+import { BRIEFING_ISSUE } from "@/lib/briefingSnapshot";
+import { formatEurWhole, formatSignedPct } from "@/lib/moneyFormat";
+import { CONCENTRATION_SNAPSHOT, PORTFOLIO_SNAPSHOT } from "@/lib/portfolioSnapshot";
 
 export default function HomePage() {
   return (
@@ -30,6 +34,31 @@ export default function HomePage() {
               See a sample briefing
             </Link>
           </div>
+        </div>
+      </section>
+
+      <section className="card overflow-hidden fade-up">
+        <div className="flex items-center justify-between gap-3 border-b border-rule bg-surface-2/40 px-5 py-3">
+          <p className="label">Sample · Sunday briefing</p>
+          <p className="font-mono text-xs tabular-nums text-ink-subtle">
+            Week of {BRIEFING_ISSUE.weekOf} · Issue {BRIEFING_ISSUE.issueNumber}
+          </p>
+        </div>
+        <div className="space-y-4 p-6 sm:p-8">
+          <p className="font-sans text-4xl font-semibold tracking-tighter text-ink sm:text-5xl">
+            {formatEurWhole(PORTFOLIO_SNAPSHOT.netWorthEur)}
+          </p>
+          <GainLossTag
+            value={PORTFOLIO_SNAPSHOT.weekChangePct}
+            size="md"
+            label={`${formatSignedPct(PORTFOLIO_SNAPSHOT.weekChangePct)} since last Sunday`}
+          />
+          <p className="max-w-prose text-sm leading-relaxed text-ink-muted">
+            {CONCENTRATION_SNAPSHOT.label} makes up{" "}
+            <span className="font-mono tabular-nums text-ink">{CONCENTRATION_SNAPSHOT.weightPct}%</span> of
+            this portfolio — {CONCENTRATION_SNAPSHOT.weightPct - CONCENTRATION_SNAPSHOT.thresholdPct} points
+            above a {CONCENTRATION_SNAPSHOT.thresholdPct}% guideline. Described here, never acted on.
+          </p>
         </div>
       </section>
 

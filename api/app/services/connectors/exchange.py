@@ -34,7 +34,9 @@ from app.services.connectors.snapshot import (
 )
 
 # Launch set. CCXT supports far more; these are the ones we surface + test against.
-SUPPORTED_EXCHANGES = {"kraken", "coinbase", "binance"}
+# Bitvavo is the EUR-native EU leader (dominant in NL, growing in DE); Kraken /
+# Coinbase / Binance round out the set EU retail actually uses. All are CCXT ids.
+SUPPORTED_EXCHANGES = {"bitvavo", "kraken", "coinbase", "binance"}
 
 
 def is_supported(exchange: str) -> bool:

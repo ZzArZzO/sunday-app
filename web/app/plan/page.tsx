@@ -1,43 +1,19 @@
-"use client";
-
 import { Disclaimer } from "@/components/Disclaimer";
 import { DividendCard } from "@/components/DividendCard";
 import { FireCard } from "@/components/FireCard";
 import { RebalanceCard } from "@/components/RebalanceCard";
 import { TaxCard } from "@/components/TaxCard";
-import { fetchDividend, fetchFire, fetchRebalance, fetchTax } from "@/lib/api";
-import { useAsync } from "@/lib/useAsync";
+import { DIVIDEND_SNAPSHOT, FIRE_SNAPSHOT, REBALANCE_SNAPSHOT, TAX_SNAPSHOT } from "@/lib/planSnapshot";
 
 /**
  * The "Plan" hub — groups the lower-frequency analytical views (financial
  * independence, dividend income, tax outlook, rebalancing) behind one mobile
  * tab, per the mobile UX research. Information only, never advice.
+ *
+ * FIRE progress leads at full width since it's the one figure on this page
+ * with an emotional arc — everything else here supports it as context.
  */
 export default function PlanPage() {
-  const { data, loading, error } = useAsync(() =>
-    Promise.all([fetchFire(), fetchDividend(), fetchTax(), fetchRebalance()]),
-  );
-
-  if (loading) {
-    return (
-      <div className="grid gap-4 lg:grid-cols-2">
-        <div className="skeleton h-48 w-full" />
-        <div className="skeleton h-48 w-full" />
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="card border-negative/30 bg-negative-subtle/40 p-5">
-        <p className="font-medium text-negative">Couldn&apos;t load your plan</p>
-        <p className="mt-2 text-sm text-ink">{error}</p>
-      </div>
-    );
-  }
-
-  const [fire, dividend, tax, rebalance] = data;
-
   return (
     <div className="space-y-10 fade-up sm:space-y-12">
       <header className="space-y-2">
@@ -51,15 +27,14 @@ export default function PlanPage() {
         </p>
       </header>
 
-      <section className="grid gap-4 lg:grid-cols-2">
-        <FireCard fire={fire} />
-        <DividendCard dividend={dividend} />
-      </section>
+      <FireCard fire={FIRE_SNAPSHOT} />
 
       <section className="grid gap-4 lg:grid-cols-2">
-        <RebalanceCard rebalance={rebalance} />
-        <TaxCard tax={tax} />
+        <DividendCard dividend={DIVIDEND_SNAPSHOT} />
+        <RebalanceCard rebalance={REBALANCE_SNAPSHOT} />
       </section>
+
+      <TaxCard tax={TAX_SNAPSHOT} />
 
       <Disclaimer />
     </div>

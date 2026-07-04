@@ -19,6 +19,7 @@ from app.deps import get_default_portfolio
 from app.models import Portfolio
 from app.schemas.prices import PriceRefreshResponse
 from app.services import fx, snapshots
+from app.services.prices import isin_resolver
 from app.services.prices import refresh as prices_refresh
 from app.services.prices.base import PricesUnavailable
 from app.services.prices.yfinance_provider import YFinanceProvider
@@ -49,11 +50,16 @@ def refresh_prices(
 
     cross_rates = prices_refresh.fetch_cross_rates(provider)
 
+    # Resolve ISIN-only holdings (e.g. DEGIRO) to market symbols so they price.
+    positions = list(portfolio.positions)
+    isin_map = isin_resolver.resolve(db, [p.isin for p in positions if p.isin])
+
     result = prices_refresh.price_positions(
-        list(portfolio.positions),
+        positions,
         provider,
         eur_usd_rate=eur_usd,
         cross_rates=cross_rates,
+        isin_map=isin_map,
         now=now,
     )
     db.commit()
