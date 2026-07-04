@@ -88,7 +88,7 @@ export default function HomePage() {
           view, an email, and a PDF, every Sunday evening in your timezone.
         </p>
         <div className="mt-6">
-          <Disclaimer extra="MVP preview · sample portfolio uses placeholder prices · live prices land in Phase 2." />
+          <Disclaimer extra="Preview shown above uses a sample portfolio — sign up to see your own." />
         </div>
       </section>
     </div>
