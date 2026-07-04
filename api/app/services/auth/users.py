@@ -1,4 +1,4 @@
-"""User provisioning for magic-link sign-in."""
+"""User provisioning for Supabase-authenticated sign-in."""
 
 from __future__ import annotations
 
@@ -17,14 +17,28 @@ def is_valid_email(email: str) -> bool:
     return "@" in e and "." in e.split("@")[-1] and len(e) <= 320
 
 
-def get_or_create_user(db: Session, email: str) -> User:
-    """Return the user for this email, creating them (+ an empty portfolio) if new."""
-    email = normalise_email(email)
-    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+def get_or_create_user_from_supabase(db: Session, supabase_user_id: str, email: str) -> User:
+    """Resolve a verified Supabase JWT's claims to a local `User` row.
+
+    Lookup order: by `supabase_user_id` (the common case for a returning
+    user), then by normalised email (bridges a pre-existing row to its
+    Supabase identity on first sign-in after the auth migration), else create
+    a new user + default portfolio.
+    """
+    user = db.execute(
+        select(User).where(User.supabase_user_id == supabase_user_id)
+    ).scalar_one_or_none()
     if user is not None:
         return user
 
-    user = User(email=email)
+    email = normalise_email(email)
+    user = db.execute(select(User).where(User.email == email)).scalar_one_or_none()
+    if user is not None:
+        user.supabase_user_id = supabase_user_id
+        db.flush()
+        return user
+
+    user = User(supabase_user_id=supabase_user_id, email=email)
     db.add(user)
     db.flush()
     # New users get an empty default portfolio so they can import immediately.

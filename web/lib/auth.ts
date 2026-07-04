@@ -1,13 +1,8 @@
-// Auth client — talks to the API's magic-link endpoints. Web uses the httpOnly
-// session cookie; mobile (Capacitor) uses a stored Bearer token (lib/authToken).
+// Auth client — Supabase Auth (email/password, TOTP MFA, Google/Apple OAuth).
+// The Supabase browser client manages its own session cookie; api.ts reads it
+// via getSession() and forwards the access token as a Bearer header.
 
-import { clearAuthToken, getAuthToken, setAuthToken } from "@/lib/authToken";
-import { isLockEnabled } from "@/lib/biometricPref";
-import { clearPersistedToken, persistToken } from "@/lib/secureToken";
-
-function apiUrl(): string {
-  return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-}
+import { createClient } from "@/lib/supabase/client";
 
 export type Me = {
   authenticated: boolean;
@@ -15,72 +10,48 @@ export type Me = {
   country: string | null;
 };
 
-export type MagicLinkResult = {
-  sent: boolean;
-  dry_run: boolean;
-  dev_link: string | null;
-};
+export async function signUpWithPassword(
+  email: string,
+  password: string,
+): Promise<{ needsEmailConfirmation: boolean }> {
+  const { data, error } = await createClient().auth.signUp({ email, password });
+  if (error) throw new Error(error.message);
+  // Supabase issues a session immediately unless "Confirm email" is on for the project.
+  return { needsEmailConfirmation: !data.session };
+}
 
-export async function requestMagicLink(email: string): Promise<MagicLinkResult> {
-  const res = await fetch(`${apiUrl()}/api/auth/request`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    credentials: "include",
-    body: JSON.stringify({ email }),
+export async function signInWithPassword(email: string, password: string): Promise<void> {
+  const { error } = await createClient().auth.signInWithPassword({ email, password });
+  if (error) throw new Error(error.message);
+}
+
+export async function signInWithOAuth(provider: "google" | "apple"): Promise<void> {
+  const { error } = await createClient().auth.signInWithOAuth({
+    provider,
+    options: { redirectTo: `${window.location.origin}/auth/callback` },
   });
-  if (!res.ok) {
-    throw new Error(`${res.status}: ${await res.text()}`);
-  }
-  return res.json() as Promise<MagicLinkResult>;
+  if (error) throw new Error(error.message);
+}
+
+export async function signOut(): Promise<void> {
+  await createClient().auth.signOut();
 }
 
 export async function fetchMe(): Promise<Me> {
+  const {
+    data: { session },
+  } = await createClient().auth.getSession();
+  if (!session) return { authenticated: false, email: null, country: null };
+
   try {
-    const token = getAuthToken();
-    const res = await fetch(`${apiUrl()}/api/auth/me`, {
-      credentials: "include",
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+    const res = await fetch(`${apiUrl}/api/auth/me`, {
       cache: "no-store",
-      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      headers: { Authorization: `Bearer ${session.access_token}` },
     });
     if (!res.ok) return { authenticated: false, email: null, country: null };
     return (await res.json()) as Me;
   } catch {
     return { authenticated: false, email: null, country: null };
   }
-}
-
-export async function logout(): Promise<void> {
-  const token = getAuthToken();
-  await fetch(`${apiUrl()}/api/auth/logout`, {
-    method: "POST",
-    credentials: "include",
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-  });
-  clearAuthToken();
-  await clearPersistedToken();
-}
-
-/**
- * Mobile sign-in completion: trade a magic-link token for a session token and
- * store it (Bearer auth). Web doesn't use this — it gets a cookie via the
- * /api/auth/verify redirect.
- */
-export async function exchangeMagicToken(magicToken: string): Promise<Me> {
-  const res = await fetch(`${apiUrl()}/api/auth/exchange`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ magic_token: magicToken }),
-  });
-  if (!res.ok) {
-    throw new Error(`${res.status}: ${await res.text()}`);
-  }
-  const data = (await res.json()) as {
-    session_token: string;
-    email: string | null;
-    country: string | null;
-  };
-  setAuthToken(data.session_token);
-  // Persist to the Keychain/Keystore, biometric-protected unless the user opted out.
-  await persistToken(data.session_token, isLockEnabled());
-  return { authenticated: true, email: data.email, country: data.country };
 }

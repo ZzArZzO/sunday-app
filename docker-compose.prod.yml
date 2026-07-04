@@ -16,7 +16,7 @@ services:
       API_CORS_ORIGINS: ${API_CORS_ORIGINS}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       AUTH_REQUIRED: "true"
-      COOKIE_SECURE: "true"
+      SUPABASE_URL: ${SUPABASE_URL}
       ENABLE_SCHEDULER: ${ENABLE_SCHEDULER:-false}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       ANTHROPIC_REGION: eu
@@ -30,7 +30,6 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: ${EMAIL_FROM}
       APP_BASE_URL: ${APP_BASE_URL}
-      API_BASE_URL: ${API_BASE_URL}
       SENTRY_DSN: ${SENTRY_DSN:-}
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
@@ -44,10 +43,11 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${API_BASE_URL}
+        NEXT_PUBLIC_SUPABASE_URL: ${SUPABASE_URL}
+        NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
     container_name: sunday-web
     restart: unless-stopped
     environment:
-      API_INTERNAL_URL: http://api:8000
       NODE_ENV: production
     depends_on:
       api:

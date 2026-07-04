@@ -1,5 +1,5 @@
-"""Magic-link authentication: tokens + sessions + user provisioning.
+"""Supabase-authenticated sign-in: JWT verification + user provisioning.
 
-    tokens.py — create/consume single-use magic tokens; create/lookup/revoke sessions
-    users.py  — get-or-create a user (with a default empty portfolio) by email
+    supabase_jwt.py — verify a Supabase access token (JWKS) into claims
+    users.py        — get-or-create a local User row from those claims
 """

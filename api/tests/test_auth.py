@@ -1,140 +1,218 @@
-"""Tests for magic-link auth (services/auth). DB-backed via the in-memory fixture."""
+"""Tests for Supabase Auth JWT verification + user provisioning.
 
-from datetime import datetime, timedelta, timezone
+Signs test JWTs with a locally-generated RSA keypair and monkeypatches the
+JWKS client to serve its public key, so verification runs for real (signature,
+audience, issuer) without any network call to Supabase.
+"""
 
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+import jwt
+import pytest
+from cryptography.hazmat.primitives.asymmetric import rsa
 from sqlalchemy.orm import Session
 
-from app.models import MagicToken
-from app.services.auth import tokens as auth_tokens
+from app.services.auth import supabase_jwt
 from app.services.auth import users as auth_users
 
-NOW = datetime(2026, 6, 14, 12, 0, tzinfo=timezone.utc)
+SUPABASE_URL = "https://project.supabase.co"
+ISSUER = f"{SUPABASE_URL}/auth/v1"
+USER_ID = "11111111-1111-1111-1111-111111111111"
+
+_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+_PUBLIC_KEY = _PRIVATE_KEY.public_key()
 
 
-class TestGetOrCreateUser:
-    def test_creates_user_and_default_portfolio_normalised(self, db: Session):
-        user = auth_users.get_or_create_user(db, "  Marco@Example.COM ")
+@dataclass
+class _FakeSigningKey:
+    key: object
+
+
+class _FakeJWKClient:
+    def get_signing_key_from_jwt(self, token: str) -> _FakeSigningKey:
+        return _FakeSigningKey(key=_PUBLIC_KEY)
+
+
+class _FakeSettings:
+    supabase_url = SUPABASE_URL
+
+
+@pytest.fixture()
+def fake_jwks(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(supabase_jwt, "_jwks_client", lambda: _FakeJWKClient())
+    monkeypatch.setattr(supabase_jwt, "get_settings", lambda: _FakeSettings())
+
+
+def _token(sub: str = USER_ID, email: str | None = "a@b.com", aal: str = "aal1", **extra: str) -> str:
+    payload = {"sub": sub, "email": email, "aal": aal, "aud": "authenticated", "iss": ISSUER, **extra}
+    return jwt.encode(payload, _PRIVATE_KEY, algorithm="RS256")
+
+
+class TestVerifyAccessToken:
+    def test_valid_token_resolves_claims(self, fake_jwks: None) -> None:
+        claims = supabase_jwt.verify_access_token(_token())
+        assert claims is not None
+        assert claims.user_id == USER_ID
+        assert claims.email == "a@b.com"
+        assert claims.aal == "aal1"
+
+    def test_reads_mfa_assurance_level(self, fake_jwks: None) -> None:
+        claims = supabase_jwt.verify_access_token(_token(aal="aal2"))
+        assert claims is not None and claims.aal == "aal2"
+
+    def test_wrong_audience_rejected(self, fake_jwks: None) -> None:
+        assert supabase_jwt.verify_access_token(_token(aud="not-authenticated")) is None
+
+    def test_wrong_issuer_rejected(self, fake_jwks: None) -> None:
+        assert supabase_jwt.verify_access_token(_token(iss="https://evil.example/auth/v1")) is None
+
+    def test_wrong_signing_key_rejected(self, fake_jwks: None) -> None:
+        other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        payload = {"sub": USER_ID, "email": "a@b.com", "aal": "aal1", "aud": "authenticated", "iss": ISSUER}
+        forged = jwt.encode(payload, other_key, algorithm="RS256")
+        assert supabase_jwt.verify_access_token(forged) is None
+
+    def test_garbage_token_rejected(self, fake_jwks: None) -> None:
+        assert supabase_jwt.verify_access_token("not-a-jwt") is None
+
+    def test_missing_supabase_url_short_circuits(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        class _NoUrlSettings:
+            supabase_url = ""
+
+        monkeypatch.setattr(supabase_jwt, "get_settings", lambda: _NoUrlSettings())
+        supabase_jwt._jwks_client.cache_clear()
+        try:
+            assert supabase_jwt.verify_access_token(_token()) is None
+        finally:
+            supabase_jwt._jwks_client.cache_clear()
+
+
+class TestBearerTokenFromRequest:
+    class _FakeReq:
+        def __init__(self, headers: dict | None = None):
+            self.headers = headers or {}
+
+    def test_bearer_header_extracted(self) -> None:
+        req = self._FakeReq(headers={"Authorization": "Bearer abc123"})
+        assert supabase_jwt.bearer_token_from_request(req) == "abc123"
+
+    def test_none_when_missing(self) -> None:
+        assert supabase_jwt.bearer_token_from_request(self._FakeReq()) is None
+
+    def test_ignores_non_bearer_scheme(self) -> None:
+        req = self._FakeReq(headers={"Authorization": "Basic xyz"})
+        assert supabase_jwt.bearer_token_from_request(req) is None
+
+    def test_empty_bearer_is_ignored(self) -> None:
+        req = self._FakeReq(headers={"Authorization": "Bearer   "})
+        assert supabase_jwt.bearer_token_from_request(req) is None
+
+
+class TestGetOrCreateUserFromSupabase:
+    def test_creates_user_and_default_portfolio(self, db: Session) -> None:
+        user = auth_users.get_or_create_user_from_supabase(db, USER_ID, "Marco@Example.COM")
+        assert user.supabase_user_id == USER_ID
         assert user.email == "marco@example.com"
-        assert len(list(user.portfolios)) == 1  # empty default portfolio
+        assert len(list(user.portfolios)) == 1
 
-    def test_idempotent_by_email(self, db: Session):
-        a = auth_users.get_or_create_user(db, "x@y.com")
-        b = auth_users.get_or_create_user(db, "X@Y.com")
+    def test_idempotent_by_supabase_user_id(self, db: Session) -> None:
+        a = auth_users.get_or_create_user_from_supabase(db, USER_ID, "a@b.com")
+        b = auth_users.get_or_create_user_from_supabase(db, USER_ID, "a@b.com")
         assert a.id == b.id
 
-    def test_email_validation(self):
-        assert auth_users.is_valid_email("a@b.co")
-        assert not auth_users.is_valid_email("nope")
-        assert not auth_users.is_valid_email("a@b")
+    def test_bridges_existing_row_by_email(self, db: Session) -> None:
+        # A row that predates Supabase (e.g. seeded directly) has no supabase_user_id yet.
+        from app.models import Portfolio, User
+
+        existing = User(email="preexisting@b.com")
+        db.add(existing)
+        db.flush()
+        db.add(Portfolio(user_id=existing.id, name="Main"))
+        db.flush()
+
+        bridged = auth_users.get_or_create_user_from_supabase(db, USER_ID, "PreExisting@b.com")
+        assert bridged.id == existing.id
+        assert bridged.supabase_user_id == USER_ID
 
 
-class TestMagicToken:
-    def test_create_and_consume_once(self, db: Session):
-        user = auth_users.get_or_create_user(db, "a@b.com")
-        token = auth_tokens.create_magic_token(db, user, now=NOW)
-        got = auth_tokens.consume_magic_token(db, token, now=NOW + timedelta(minutes=1))
-        assert got is not None and got.id == user.id
-        # single-use: a second consume fails.
-        assert auth_tokens.consume_magic_token(db, token, now=NOW + timedelta(minutes=2)) is None
+class TestGetCurrentUser:
+    class _FakeReq:
+        def __init__(self, headers: dict | None = None):
+            self.headers = headers or {}
 
-    def test_expired_token_rejected(self, db: Session):
-        user = auth_users.get_or_create_user(db, "a@b.com")
-        token = auth_tokens.create_magic_token(db, user, now=NOW)
-        assert auth_tokens.consume_magic_token(db, token, now=NOW + timedelta(minutes=20)) is None
+    class _FakeSettings:
+        def __init__(self, auth_required: bool = True, demo_user_id: int = 1):
+            self.auth_required = auth_required
+            self.demo_user_id = demo_user_id
 
-    def test_unknown_token_rejected(self, db: Session):
-        assert auth_tokens.consume_magic_token(db, "garbage", now=NOW) is None
-
-    def test_only_hash_is_stored(self, db: Session):
-        user = auth_users.get_or_create_user(db, "a@b.com")
-        token = auth_tokens.create_magic_token(db, user, now=NOW)
-        row = db.query(MagicToken).first()
-        assert row.token_hash != token and len(row.token_hash) == 64
-
-
-class TestSession:
-    def test_create_lookup_revoke(self, db: Session):
-        user = auth_users.get_or_create_user(db, "a@b.com")
-        token = auth_tokens.create_session(db, user, now=NOW)
-        found = auth_tokens.lookup_session(db, token, now=NOW + timedelta(days=1))
-        assert found is not None and found.id == user.id
-
-        auth_tokens.revoke_session(db, token)
-        assert auth_tokens.lookup_session(db, token, now=NOW + timedelta(days=1)) is None
-
-    def test_expired_session_rejected(self, db: Session):
-        user = auth_users.get_or_create_user(db, "a@b.com")
-        token = auth_tokens.create_session(db, user, now=NOW)
-        assert auth_tokens.lookup_session(db, token, now=NOW + timedelta(days=40)) is None
-
-    def test_empty_token(self, db: Session):
-        assert auth_tokens.lookup_session(db, "", now=NOW) is None
-
-
-class _FakeReq:
-    def __init__(self, headers: dict | None = None, cookies: dict | None = None):
-        self.headers = headers or {}
-        self.cookies = cookies or {}
-
-
-class TestSessionTokenFromRequest:
-    def test_bearer_header_wins(self):
-        req = _FakeReq(
-            headers={"Authorization": "Bearer abc123"},
-            cookies={auth_tokens.SESSION_COOKIE: "cookieval"},
-        )
-        assert auth_tokens.session_token_from_request(req) == "abc123"
-
-    def test_falls_back_to_cookie(self):
-        req = _FakeReq(cookies={auth_tokens.SESSION_COOKIE: "cookieval"})
-        assert auth_tokens.session_token_from_request(req) == "cookieval"
-
-    def test_none_when_neither(self):
-        assert auth_tokens.session_token_from_request(_FakeReq()) is None
-
-    def test_ignores_non_bearer_scheme(self):
-        req = _FakeReq(headers={"Authorization": "Basic xyz"})
-        assert auth_tokens.session_token_from_request(req) is None
-
-    def test_empty_bearer_is_ignored(self):
-        req = _FakeReq(headers={"Authorization": "Bearer   "})
-        assert auth_tokens.session_token_from_request(req) is None
-
-
-class TestTokenAuthFlow:
-    def test_exchange_returns_resolvable_session_token(self, db: Session):
-        from app.routes.auth import exchange
-        from app.schemas.auth import ExchangeRequest
-
-        user = auth_users.get_or_create_user(db, "m@b.com")
-        magic = auth_tokens.create_magic_token(db, user)
-        db.commit()
-
-        resp = exchange(ExchangeRequest(magic_token=magic), db)
-        assert resp.session_token and resp.email == "m@b.com"
-        # The returned token resolves to the same user.
-        assert auth_tokens.lookup_session(db, resp.session_token).id == user.id
-
-    def test_exchange_rejects_bad_magic_token(self, db: Session):
-        from fastapi import HTTPException
-
-        from app.routes.auth import exchange
-        from app.schemas.auth import ExchangeRequest
-
-        try:
-            exchange(ExchangeRequest(magic_token="garbage"), db)
-            raise AssertionError("expected HTTPException")
-        except HTTPException as exc:
-            assert exc.status_code == 401
-
-    def test_get_current_user_resolves_bearer_token(self, db: Session):
-        from app.config import get_settings
+    def test_resolves_user_from_valid_bearer_token(self, db: Session, fake_jwks: None) -> None:
         from app.deps import get_current_user
 
-        user = auth_users.get_or_create_user(db, "m@b.com")
-        token = auth_tokens.create_session(db, user)
-        db.commit()
+        req = self._FakeReq(headers={"Authorization": f"Bearer {_token()}"})
+        user = get_current_user(req, db, self._FakeSettings())
+        assert user.supabase_user_id == USER_ID
+        assert user.email == "a@b.com"
 
-        req = _FakeReq(headers={"Authorization": f"Bearer {token}"})
-        got = get_current_user(req, db, get_settings())
-        assert got.id == user.id
+    def test_no_token_and_auth_required_raises_401(self, db: Session) -> None:
+        from fastapi import HTTPException
+
+        from app.deps import get_current_user
+
+        with pytest.raises(HTTPException) as exc:
+            get_current_user(self._FakeReq(), db, self._FakeSettings(auth_required=True))
+        assert exc.value.status_code == 401
+
+    def test_no_token_and_auth_not_required_falls_back_to_demo_user(self, db: Session) -> None:
+        from app.deps import get_current_user
+        from app.models import User
+
+        demo = User(email="demo@example.com")
+        db.add(demo)
+        db.flush()
+
+        got = get_current_user(self._FakeReq(), db, self._FakeSettings(auth_required=False, demo_user_id=demo.id))
+        assert got.id == demo.id
+
+    def test_invalid_token_and_auth_required_raises_401(self, db: Session, fake_jwks: None) -> None:
+        from fastapi import HTTPException
+
+        from app.deps import get_current_user
+
+        req = self._FakeReq(headers={"Authorization": "Bearer garbage"})
+        with pytest.raises(HTTPException) as exc:
+            get_current_user(req, db, self._FakeSettings(auth_required=True))
+        assert exc.value.status_code == 401
+
+
+class TestMeRoute:
+    """Exercises the /api/auth/me route handler itself, not just its
+    dependencies -- a bug here (wrong function name, wrong import) wouldn't
+    be caught by testing get_current_user or verify_access_token alone."""
+
+    class _FakeReq:
+        def __init__(self, headers: dict | None = None):
+            self.headers = headers or {}
+
+    def test_no_token_returns_unauthenticated(self, db: Session) -> None:
+        from app.routes.auth import me
+
+        result = me(self._FakeReq(), db)
+        assert result.authenticated is False
+        assert result.email is None
+
+    def test_invalid_token_returns_unauthenticated(self, db: Session, fake_jwks: None) -> None:
+        from app.routes.auth import me
+
+        req = self._FakeReq(headers={"Authorization": "Bearer garbage"})
+        result = me(req, db)
+        assert result.authenticated is False
+
+    def test_valid_token_returns_authenticated_user(self, db: Session, fake_jwks: None) -> None:
+        from app.routes.auth import me
+
+        req = self._FakeReq(headers={"Authorization": f"Bearer {_token()}"})
+        result = me(req, db)
+        assert result.authenticated is True
+        assert result.email == "a@b.com"

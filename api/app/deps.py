@@ -1,7 +1,9 @@
 """FastAPI dependencies.
 
-For the MVP slice we hardcode `demo_user_id` from settings and resolve their
-default portfolio. Phase 2 swaps this for an auth-cookie-driven dependency.
+Auth is Bearer-JWT-only: the frontend (web or mobile) sends
+`Authorization: Bearer <supabase_access_token>` and this dependency verifies
+it against Supabase's JWKS (see services/auth/supabase_jwt.py) — no cookie,
+no server-side session table.
 """
 
 from __future__ import annotations
@@ -12,7 +14,8 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_db
 from app.models import Portfolio, User
-from app.services.auth import tokens as auth_tokens
+from app.services.auth import supabase_jwt
+from app.services.auth import users as auth_users
 
 
 def get_current_user(
@@ -20,16 +23,16 @@ def get_current_user(
     db: Session = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> User:
-    # Real auth: resolve the session token (Bearer header for mobile, else the
-    # web cookie) to a user.
-    token = auth_tokens.session_token_from_request(request)
+    token = supabase_jwt.bearer_token_from_request(request)
     if token:
-        user = auth_tokens.lookup_session(db, token)
-        if user is not None:
-            return user
+        claims = supabase_jwt.verify_access_token(token)
+        if claims is not None and claims.email:
+            return auth_users.get_or_create_user_from_supabase(db, claims.user_id, claims.email)
 
     # Production requires a valid session; dev falls back to the demo user so
-    # single-user testing keeps working without signing in.
+    # single-user testing keeps working without signing in. Preserved verbatim
+    # from the pre-Supabase auth system — this is the local-dev escape hatch,
+    # not part of the Supabase-auth path above.
     if settings.auth_required:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated"
