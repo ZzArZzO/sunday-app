@@ -3,12 +3,11 @@ export const metadata = {
 };
 
 // DRAFT — written to unblock Stripe account activation, which requires real
-// (non-placeholder) terms covering subscription/cancellation. Bracketed
-// [PLACEHOLDER] values must be filled in before this is genuinely relied
-// upon. This has NOT been reviewed by counsel — see
-// docs/business/DEPLOYMENT_AND_MARKETING.md A.12 for the full pre-public-
-// launch legal gate this is one part of, and B.10 for the compliance-safe
-// language rules this draft follows (never "advice", "recommends", etc.).
+// (non-placeholder) terms covering subscription/cancellation. This has NOT
+// been reviewed by counsel — see docs/business/DEPLOYMENT_AND_MARKETING.md
+// A.12 for the full pre-public-launch legal gate this is one part of, and
+// B.10 for the compliance-safe language rules this draft follows (never
+// "advice", "recommends", etc.).
 
 export default function TermsPage() {
   return (
@@ -18,7 +17,7 @@ export default function TermsPage() {
         <h1 className="font-sans text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
           Terms of Service
         </h1>
-        <p className="text-sm text-ink-subtle">Last updated: [DATE] · Draft pending legal review</p>
+        <p className="text-sm text-ink-subtle">Last updated: 4 July 2026 · Draft pending legal review</p>
       </header>
 
       <div className="max-w-prose space-y-8 text-base leading-relaxed text-ink-muted">
@@ -57,10 +56,12 @@ export default function TermsPage() {
 
         <Section title="4. Your account">
           <p>
-            You&apos;re responsible for keeping access to your account secure. Sign-in uses one-time
-            email links — never share a sign-in link or your session with anyone else. Tell us
-            immediately at <strong className="text-ink">[SUPPORT CONTACT EMAIL]</strong> if you
-            suspect unauthorised access.
+            You&apos;re responsible for keeping access to your account secure — choose a strong,
+            unique password, and consider enabling the authenticator-app two-factor option in
+            Account settings. Never share your password or an active session with anyone else.
+            Tell us immediately at{" "}
+            <strong className="text-ink">hi@sundayfolio.com</strong> if you suspect unauthorised
+            access.
           </p>
         </Section>
 
@@ -79,7 +80,7 @@ export default function TermsPage() {
             </li>
             <li>
               If we ever make a billing error, contact{" "}
-              <strong className="text-ink">[SUPPORT CONTACT EMAIL]</strong> and we&apos;ll correct
+              <strong className="text-ink">hi@sundayfolio.com</strong> and we&apos;ll correct
               it.
             </li>
             <li>Prices may change; we&apos;ll give existing subscribers notice before any increase applies to them.</li>
@@ -162,7 +163,7 @@ export default function TermsPage() {
 
         <Section title="14. Contact">
           <p>
-            Questions about these Terms: <strong className="text-ink">[SUPPORT CONTACT EMAIL]</strong>.
+            Questions about these Terms: <strong className="text-ink">hi@sundayfolio.com</strong>.
           </p>
         </Section>
       </div>
