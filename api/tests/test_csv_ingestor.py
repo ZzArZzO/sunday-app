@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from sqlalchemy.orm import Session
 
-from app.models import Portfolio, User
+from app.models import Connection, Portfolio, User
 from app.services import csv_ingestor
 
 SAMPLE_CSV = (
@@ -149,3 +149,74 @@ def test_holdings_cap_allows_within_limit(db: Session) -> None:
     result = csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, max_holdings=2)
 
     assert result.positions_created == 2
+
+
+def _csv_connection(db: Session, portfolio: Portfolio, label: str = "Trade Republic") -> Connection:
+    conn = Connection(portfolio_id=portfolio.id, kind="csv", label=label)
+    db.add(conn)
+    db.flush()
+    portfolio.connections.append(conn)
+    return conn
+
+
+class TestReimportDedup:
+    """Re-uploading the same broker's CSV should replace its prior positions,
+    not double them -- this reproduces the exact bug hit importing the same
+    854-row Trade Republic file twice, where every quantity ended up ~2x."""
+
+    def test_reimporting_same_csv_does_not_double_quantities(self, db: Session) -> None:
+        portfolio = _seed_user_and_portfolio(db)
+        conn = _csv_connection(db, portfolio)
+
+        csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, connection=conn)
+        vwce_first = next(p for p in portfolio.positions if p.ticker == "VWCE")
+        assert vwce_first.quantity == Decimal("20.00000000")
+
+        csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, connection=conn)
+        vwce_second = next(p for p in portfolio.positions if p.ticker == "VWCE")
+        assert vwce_second.quantity == Decimal("20.00000000")  # unchanged, not 40
+        assert len(portfolio.positions) == 2  # VWCE + BTC, not 4
+
+    def test_different_broker_connection_is_untouched(self, db: Session) -> None:
+        """Re-importing broker A's CSV must not wipe broker B's holdings, even
+        though both are 'a CSV import' -- they're different connections."""
+        portfolio = _seed_user_and_portfolio(db)
+        degiro_conn = _csv_connection(db, portfolio, label="DEGIRO")
+        tr_conn = _csv_connection(db, portfolio, label="Trade Republic")
+
+        degiro_csv = (
+            "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur\n"
+            "2024-01-01,buy,NESN,CH0038863350,stock,5,100.00,0.00\n"
+        )
+        csv_ingestor.ingest_csv(db, portfolio, degiro_csv, connection=degiro_conn)
+        csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, connection=tr_conn)
+
+        nesn = next(p for p in portfolio.positions if p.ticker == "NESN")
+        assert nesn.quantity == Decimal("5.00000000")  # untouched by the TR import
+        assert len(portfolio.positions) == 3  # NESN + VWCE + BTC
+
+    def test_position_with_mixed_sources_is_left_untouched(self, db: Session) -> None:
+        """A position isn't fully owned by one connection (e.g. also has a
+        manually-entered lot) -- don't guess, leave it alone entirely."""
+        portfolio = _seed_user_and_portfolio(db)
+        conn = _csv_connection(db, portfolio)
+
+        csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, connection=conn)
+        vwce = next(p for p in portfolio.positions if p.ticker == "VWCE")
+        original_quantity = vwce.quantity
+
+        # A second, differently-sourced buy lands on the same ticker.
+        manual_csv = (
+            "date,type,ticker,isin,asset_class,quantity,unit_price_eur,fees_eur\n"
+            "2024-04-01,buy,VWCE,IE00BK5BQT80,etf,5,110.00,0.00\n"
+        )
+        csv_ingestor.ingest_csv(db, portfolio, manual_csv)  # no connection -> source="sunday_native"
+        assert vwce.quantity == original_quantity + Decimal("5")
+
+        # Re-importing the original TR connection's file must not delete VWCE
+        # now that it has a mixed-source lot history -- it's excluded from the
+        # replace, so the transactions apply on top of the existing pool
+        # (the known, documented limitation: not a perfect reimport for a
+        # ticker held across multiple sources, but never data loss).
+        csv_ingestor.ingest_csv(db, portfolio, SAMPLE_CSV, connection=conn)
+        assert vwce.quantity == original_quantity * 2 + Decimal("5")

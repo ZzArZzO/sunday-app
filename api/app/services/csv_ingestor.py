@@ -65,6 +65,7 @@ from app.services.connectors.base import (
     CanonicalTransaction,
     HoldingsLimitExceeded,
     apply_transactions,
+    replace_csv_import,
 )
 
 # Re-exported so existing callers (routes/ingest.py, tests) keep working.
@@ -611,14 +612,29 @@ def ingest_csv(
         txns.append(parsed)
 
     # Shared replay/persist (raises HoldingsLimitExceeded + rolls back on cap).
-    applied = apply_transactions(
-        db,
-        portfolio,
-        txns,
-        source_label=ctx.detected_format,
-        connection=connection,
-        max_holdings=max_holdings,
-    )
+    # With a connection (the normal upload path), route through
+    # replace_csv_import so re-uploading the same broker's export replaces its
+    # prior positions instead of doubling them. Callers with no connection
+    # (the sample-portfolio seed, tests) have no prior import to deduplicate
+    # against, so apply_transactions directly is correct.
+    if connection is not None:
+        applied = replace_csv_import(
+            db,
+            portfolio,
+            connection,
+            ctx.detected_format,
+            txns,
+            max_holdings=max_holdings,
+        )
+    else:
+        applied = apply_transactions(
+            db,
+            portfolio,
+            txns,
+            source_label=ctx.detected_format,
+            connection=None,
+            max_holdings=max_holdings,
+        )
 
     # Warning order matches the previous single-pass build: parse warnings, then
     # apply warnings, with the summary and detected-format banner prepended.
