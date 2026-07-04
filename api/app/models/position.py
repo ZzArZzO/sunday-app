@@ -15,7 +15,11 @@ class Position(Base):
         ForeignKey("portfolios.id", ondelete="CASCADE"), index=True
     )
 
-    ticker: Mapped[str] = mapped_column(String(32), index=True)
+    # Not always a real market ticker: brokers without a clean symbol (Trade
+    # Republic, DEGIRO) fall back to the human-readable instrument name, e.g.
+    # "FTSE All-World High Dividend Yield USD (Dist)" (45 chars) — sized well
+    # past the longest real-world fund name we've seen, not just a ticker.
+    ticker: Mapped[str] = mapped_column(String(128), index=True)
     isin: Mapped[str | None] = mapped_column(String(12), nullable=True)
     asset_class: Mapped[str] = mapped_column(String(16))  # stock | etf | crypto | cash
     sector: Mapped[str | None] = mapped_column(String(64), nullable=True)
