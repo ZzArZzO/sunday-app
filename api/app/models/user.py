@@ -11,7 +11,9 @@ class User(Base):
     __tablename__ = "users"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    # unique=True already creates an index backing the constraint — index=True
+    # would add a second, redundant one covering the same column.
+    email: Mapped[str] = mapped_column(String(320), unique=True)
     country: Mapped[str] = mapped_column(String(2), default="DE")
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Berlin")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
