@@ -5,41 +5,31 @@ import { useState } from "react";
 import { signInWithOAuth } from "@/lib/auth";
 
 export function OAuthButtons() {
-  const [pending, setPending] = useState<"google" | "apple" | null>(null);
+  const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
 
-  async function go(provider: "google" | "apple") {
+  async function goGoogle() {
     setError("");
-    setPending(provider);
+    setPending(true);
     try {
-      await signInWithOAuth(provider);
+      await signInWithOAuth("google");
       // On success the browser navigates away to the provider — nothing more to do here.
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
-      setPending(null);
+      setPending(false);
     }
   }
 
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3">
-        <button
-          type="button"
-          onClick={() => go("google")}
-          disabled={pending !== null}
-          className="btn btn-ghost justify-center border border-rule"
-        >
-          {pending === "google" ? "Redirecting…" : "Google"}
-        </button>
-        <button
-          type="button"
-          onClick={() => go("apple")}
-          disabled={pending !== null}
-          className="btn btn-ghost justify-center border border-rule"
-        >
-          {pending === "apple" ? "Redirecting…" : "Apple"}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={goGoogle}
+        disabled={pending}
+        className="btn btn-ghost w-full justify-center border border-rule"
+      >
+        {pending ? "Redirecting…" : "Continue with Google"}
+      </button>
       {error ? (
         <p className="text-sm text-negative" role="alert">
           {error}
