@@ -20,39 +20,35 @@ import type {
   SupportedCountry,
   TaxSummaryResponse,
 } from "@/lib/types";
-import { getAuthToken } from "@/lib/authToken";
+import { createClient } from "@/lib/supabase/client";
 
 function getApiUrl(): string {
-  if (typeof window === "undefined") {
-    return process.env.API_INTERNAL_URL ?? process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-  }
   return process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+}
+
+/**
+ * The API only understands `Authorization: Bearer <supabase_access_token>` —
+ * no cookie crosses the API boundary. Every caller of this module today is a
+ * Client Component (the dashboard/briefing/etc. pages render static snapshot
+ * data, not a live server-side fetch) — if a Server Component ever needs
+ * authenticated data server-side, that needs its own path using
+ * lib/supabase/server.ts, not this one (next/headers can't be bundled here
+ * without breaking every "use client" caller below).
+ */
+async function authHeader(): Promise<Record<string, string>> {
+  const {
+    data: { session },
+  } = await createClient().auth.getSession();
+  return session ? { Authorization: `Bearer ${session.access_token}` } : {};
 }
 
 async function http<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     Accept: "application/json",
+    ...(await authHeader()),
     ...((init?.headers as Record<string, string> | undefined) ?? {}),
   };
   const fetchInit: RequestInit = { ...init, cache: "no-store", headers };
-
-  if (typeof window === "undefined") {
-    // Server component: forward the caller's session cookie to the API so the
-    // request is scoped to the logged-in user (not the demo fallback).
-    try {
-      const { cookies } = await import("next/headers");
-      const cookieHeader = cookies().toString();
-      if (cookieHeader) headers["Cookie"] = cookieHeader;
-    } catch {
-      // Not inside a request scope (e.g. at build time) — skip.
-    }
-  } else {
-    // Browser: include the cross-origin session cookie (web), and a stored
-    // Bearer token if present (mobile / Capacitor — see lib/authToken).
-    fetchInit.credentials = "include";
-    const token = getAuthToken();
-    if (token) headers["Authorization"] = `Bearer ${token}`;
-  }
 
   const res = await fetch(`${getApiUrl()}${path}`, fetchInit);
   if (!res.ok) {
@@ -96,12 +92,9 @@ export async function updateDeliveryPreferences(
  * the download is scoped to the signed-in user's portfolio (not the demo fallback).
  */
 export async function fetchBriefingPdf(): Promise<Blob> {
-  const headers: Record<string, string> = { Accept: "application/pdf" };
-  const token = getAuthToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = { Accept: "application/pdf", ...(await authHeader()) };
   const res = await fetch(`${getApiUrl()}/api/briefing/pdf`, {
     cache: "no-store",
-    credentials: "include",
     headers,
   });
   if (!res.ok) {
@@ -211,13 +204,11 @@ export async function sendChatStream(
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     Accept: "text/event-stream",
+    ...(await authHeader()),
   };
-  const token = getAuthToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${getApiUrl()}/api/chat/stream`, {
     method: "POST",
     headers,
-    credentials: "include",
     body: JSON.stringify({ messages }),
   });
   if (!res.ok || !res.body) {
@@ -301,13 +292,10 @@ export async function syncConnection(id: number): Promise<ConnectionSyncResult> 
 
 /** Disconnect a source and drop its holdings (204 No Content). */
 export async function disconnectConnection(id: number): Promise<void> {
-  const headers: Record<string, string> = {};
-  const token = getAuthToken();
-  if (token) headers["Authorization"] = `Bearer ${token}`;
+  const headers: Record<string, string> = await authHeader();
   const res = await fetch(`${getApiUrl()}/api/connections/${id}`, {
     method: "DELETE",
     cache: "no-store",
-    credentials: "include",
     headers,
   });
   if (!res.ok) {

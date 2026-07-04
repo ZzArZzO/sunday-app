@@ -1,4 +1,3 @@
-from app.models.auth import MagicToken, UserSession
 from app.models.briefing import Briefing
 from app.models.connection import Connection
 from app.models.isin_symbol import IsinSymbol
@@ -20,8 +19,6 @@ __all__ = [
     "Connection",
     "IsinSymbol",
     "PortfolioSnapshot",
-    "MagicToken",
-    "UserSession",
     "LlmCallLog",
     "PushToken",
     "WeeklyDelivery",

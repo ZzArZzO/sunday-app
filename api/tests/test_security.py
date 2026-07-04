@@ -1,4 +1,4 @@
-"""HTTP-level security checks: rate limiting and security response headers.
+"""HTTP-level security checks: response headers.
 
 Uses a TestClient against the real app with an in-memory SQLite DB injected via
 the get_db dependency override, so no Postgres is needed.
@@ -52,14 +52,3 @@ class TestSecurityHeaders:
         assert resp.headers["X-Content-Type-Options"] == "nosniff"
         assert resp.headers["X-Frame-Options"] == "DENY"
         assert resp.headers["Referrer-Policy"] == "strict-origin-when-cross-origin"
-
-
-class TestAuthRateLimit:
-    def test_request_magic_link_is_rate_limited(self, client: TestClient):
-        # The limit is 5/minute; the 6th request from the same client gets 429.
-        statuses = [
-            client.post("/api/auth/request", json={"email": "spammer@test.com"}).status_code
-            for _ in range(6)
-        ]
-        assert statuses[:5] == [200, 200, 200, 200, 200]
-        assert statuses[5] == 429
