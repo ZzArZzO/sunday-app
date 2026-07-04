@@ -3,13 +3,12 @@ export const metadata = {
 };
 
 // DRAFT — written to unblock Stripe account activation, which requires a
-// live, real (non-placeholder) privacy policy. Bracketed [PLACEHOLDER]
-// values must be filled in before this is genuinely relied upon. Deliberately
-// omits a business registration number (NIF) — founder's choice not to
-// publish it; note this may leave a gap under EU e-Commerce Directive
-// provider-transparency rules, separate from GDPR itself. This has NOT been
-// reviewed by counsel — see docs/business/DEPLOYMENT_AND_MARKETING.md A.12
-// for the full pre-public-launch legal gate this is one part of.
+// live, real (non-placeholder) privacy policy. Deliberately omits a business
+// registration number (NIF) — founder's choice not to publish it; note this
+// may leave a gap under EU e-Commerce Directive provider-transparency rules,
+// separate from GDPR itself. This has NOT been reviewed by counsel — see
+// docs/business/DEPLOYMENT_AND_MARKETING.md A.12 for the full pre-public-
+// launch legal gate this is one part of.
 
 export default function PrivacyPage() {
   return (
@@ -19,20 +18,20 @@ export default function PrivacyPage() {
         <h1 className="font-sans text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
           Privacy Policy
         </h1>
-        <p className="text-sm text-ink-subtle">Last updated: [DATE] · Draft pending legal review</p>
+        <p className="text-sm text-ink-subtle">Last updated: 4 July 2026 · Draft pending legal review</p>
       </header>
 
       <div className="max-w-prose space-y-8 text-base leading-relaxed text-ink-muted">
         <Section title="1. Who we are">
           <p>
             Sunday (&quot;Sunday&quot;, &quot;we&quot;, &quot;us&quot;) is operated by{" "}
-            <strong className="text-ink">[YOUR FULL LEGAL NAME]</strong>, a sole trader
-            (trabalhador independente) based in Portugal. We are the data controller for the
-            personal data described in this policy.
+            <strong className="text-ink">Afonso José Carvalho Marques da Costa</strong>, a sole
+            trader (trabalhador independente) based in Portugal. We are the data controller for
+            the personal data described in this policy.
           </p>
           <p>
             Contact for any privacy question or request:{" "}
-            <strong className="text-ink">[PRIVACY CONTACT EMAIL]</strong>.
+            <strong className="text-ink">hi@sundayfolio.com</strong>.
           </p>
         </Section>
 
@@ -101,8 +100,8 @@ export default function PrivacyPage() {
               billing.
             </li>
             <li>
-              <strong className="text-ink">Resend</strong> — delivery of the weekly briefing email
-              and account emails (sign-in links).
+              <strong className="text-ink">Resend</strong> — delivery of the weekly briefing
+              email.
             </li>
             <li>
               <strong className="text-ink">Supabase</strong> (Frankfurt, EU) — database hosting and
@@ -157,7 +156,7 @@ export default function PrivacyPage() {
           </ul>
           <p>
             To exercise any of these rights, email{" "}
-            <strong className="text-ink">[PRIVACY CONTACT EMAIL]</strong>. We currently handle
+            <strong className="text-ink">hi@sundayfolio.com</strong>. We currently handle
             deletion and export requests manually and respond within 30 days; self-service tools are
             planned.
           </p>
@@ -165,9 +164,10 @@ export default function PrivacyPage() {
 
         <Section title="8. Security">
           <p>
-            Passwords are never stored — sign-in uses one-time email links. Session tokens and
-            connected-exchange credentials are stored encrypted, never in plain text. Traffic
-            between your browser and our servers is encrypted in transit (TLS).
+            Authentication is handled by Supabase Auth: passwords are stored hashed and salted,
+            never in plain text, and an optional authenticator-app second factor (TOTP) is
+            available from Account settings. Connected-exchange credentials are stored encrypted
+            at rest. Traffic between your browser and our servers is encrypted in transit (TLS).
           </p>
         </Section>
 
