@@ -11,9 +11,19 @@ Supported formats:
   1. Sunday's normalised columns (legacy):
         date, type, ticker, isin, asset_class, quantity, unit_price_eur, fees_eur
 
-  2. Trade Republic export (auto-detected):
+  2. Trade Republic export, older layout (auto-detected):
         Date, Type, Asset, ISIN, Shares, Price per share, Total, Fee, Tax, ...
         — German variants ("Datum", "Typ", "Stück", "Preis pro Anteil") also recognised.
+
+  3. Trade Republic "Transaction export", current layout (auto-detected as
+     trade_republic_v2): datetime, date, account_type, category, type,
+     asset_class, name, symbol, shares, price, amount, fee, tax, currency, ...
+     — no column literally called "isin"; it lives inside `symbol`, and `name`
+     carries the human-readable instrument name instead of a ticker. Needs its
+     own column map (TRADE_REPUBLIC_V2_HEADER_ALIASES) rather than the generic
+     alias table: `name` and `symbol` would otherwise both match the generic
+     "ticker" alias, and whichever loses that race has its ISIN silently
+     dropped for every position.
 
 Transaction types handled (EU average-cost method):
   - BUY      → weighted-average cost update, creates an audit Lot.
@@ -80,6 +90,29 @@ HEADER_ALIASES: dict[str, set[str]] = {
     "split_ratio": {"split_ratio", "split ratio", "ratio"},
 }
 
+
+# Modern Trade Republic "Transaction export" (their current downloadable CSV,
+# distinct from the older Date/Type/Asset/ISIN/Shares layout HEADER_ALIASES
+# above already handles). Critically, there is no column literally called
+# "isin" — the ISIN lives in `symbol`, and `name` carries the human-readable
+# instrument name. Both `name` and `symbol` would otherwise collide on the
+# generic "ticker" alias (which lists "symbol" as an alias), silently
+# dropping the ISIN entirely — hence a dedicated, unambiguous map instead of
+# extending HEADER_ALIASES.
+TRADE_REPUBLIC_V2_HEADER_ALIASES: dict[str, set[str]] = {
+    "date": {"date"},
+    "type": {"type"},
+    "ticker": {"name"},
+    "isin": {"symbol"},
+    "asset_class": {"asset_class"},
+    "quantity": {"shares"},
+    "unit_price_eur": {"price"},
+    "fees_eur": {"fee"},
+}
+
+# Trade Republic's own asset-class vocabulary ("FUND" for ETFs) normalised to
+# Sunday's — applied in addition to a direct match against ALLOWED_ASSET_CLASSES.
+_ASSET_CLASS_ALIASES = {"fund": "etf"}
 
 # Heuristics to classify when the CSV doesn't tell us.
 CRYPTO_SYMBOLS = {"BTC", "ETH", "SOL", "ADA", "DOT", "AVAX", "MATIC", "XRP", "DOGE", "LINK"}
@@ -164,6 +197,20 @@ def _build_degiro_column_map(fieldnames: list[str]) -> dict[str, str]:
     return mapping
 
 
+def _build_trade_republic_v2_column_map(fieldnames: list[str]) -> dict[str, str]:
+    """Map the modern Trade Republic export's headers, unambiguously — see
+    TRADE_REPUBLIC_V2_HEADER_ALIASES for why this can't reuse the generic
+    alias table (name/symbol would collide on the shared "ticker" alias)."""
+    mapping: dict[str, str] = {}
+    for raw in fieldnames:
+        h = _normalise_header(raw)
+        for canonical, aliases in TRADE_REPUBLIC_V2_HEADER_ALIASES.items():
+            if h in aliases and canonical not in mapping.values():
+                mapping[raw] = canonical
+                break
+    return mapping
+
+
 def _detect_format(fieldnames: list[str]) -> str:
     normalised = {_normalise_header(h) for h in fieldnames}
     if {"date", "type", "ticker", "asset_class"}.issubset(normalised):
@@ -173,6 +220,10 @@ def _detect_format(fieldnames: list[str]) -> str:
         "quantity" in normalised or "aantal" in normalised
     ):
         return "degiro"
+    # Trade Republic's current "Transaction export" download: no literal "isin"
+    # column (it's inside "symbol"), separate "name" and "category" columns.
+    if {"symbol", "shares", "name", "category", "asset_class"}.issubset(normalised):
+        return "trade_republic_v2"
     if {"isin"}.issubset(normalised) and (
         "shares" in normalised or "stück" in normalised
     ):
@@ -301,6 +352,7 @@ def _parse_row(
     asset_class_raw = _row_get(row, column_map, "asset_class")
     if asset_class_raw:
         asset_class = asset_class_raw.strip().lower()
+        asset_class = _ASSET_CLASS_ALIASES.get(asset_class, asset_class)
         if asset_class not in ALLOWED_ASSET_CLASSES:
             ctx.warnings.append(f"unknown asset_class {asset_class!r}; inferring")
             asset_class = _infer_asset_class(ticker_raw, isin)
@@ -437,10 +489,14 @@ RowParser = Callable[[dict[str, str], dict[str, str], IngestionContext], "Canoni
 
 def _mapper_and_parser(detected: str, fieldnames: list[str]) -> tuple[dict[str, str], RowParser]:
     """Pick the column map + row parser for a detected format. DEGIRO has no type
-    column (sign-based direction), so it uses a dedicated parser; everything else
-    shares the alias-driven `_parse_row`."""
+    column (sign-based direction), so it uses a dedicated parser; the modern
+    Trade Republic export has an unambiguous dedicated column map (see
+    TRADE_REPUBLIC_V2_HEADER_ALIASES) but still uses `_parse_row` since it does
+    have a type column; everything else shares the alias-driven `_parse_row`."""
     if detected == "degiro":
         return _build_degiro_column_map(fieldnames), _parse_degiro_row
+    if detected == "trade_republic_v2":
+        return _build_trade_republic_v2_column_map(fieldnames), _parse_row
     return _build_column_map(fieldnames), _parse_row
 
 
