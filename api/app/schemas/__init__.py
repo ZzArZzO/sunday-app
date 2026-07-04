@@ -1,4 +1,4 @@
-from app.schemas.auth import MagicLinkRequest, MagicLinkResponse, MeResponse
+from app.schemas.auth import MeResponse
 from app.schemas.briefing import BriefingResponse, BriefingSection
 from app.schemas.chat import ChatMessage, ChatRequest, ChatResponse
 from app.schemas.delivery import DeliveryResultView, WeeklyDeliverySummary
@@ -25,8 +25,6 @@ __all__ = [
     "ChatResponse",
     "ConcentrationItem",
     "DeliveryResultView",
-    "MagicLinkRequest",
-    "MagicLinkResponse",
     "MeResponse",
     "DividendPositionView",
     "DividendResponse",

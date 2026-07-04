@@ -42,8 +42,8 @@ stripe>=11,<13
 cryptography>=42
 ccxt>=4.4,<5
 
-# --- Rate limiting (auth endpoints; in-memory fixed-window via a dependency) ---
-limits>=3.6,<6
+# --- Auth (Supabase Auth JWT verification via JWKS) ---
+PyJWT[crypto]>=2.9,<3
 
 # --- Error tracking (dormant unless SENTRY_DSN is set) ---
 sentry-sdk[fastapi]>=2.0,<3

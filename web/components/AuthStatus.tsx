@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
-import { fetchMe, logout, type Me } from "@/lib/auth";
+import { fetchMe, signOut as supabaseSignOut, type Me } from "@/lib/auth";
+import { createClient } from "@/lib/supabase/client";
 
 /** Compact nav indicator: "Sign in" when logged out, email + "Sign out" when in. */
 export function AuthStatus() {
@@ -16,8 +17,19 @@ export function AuthStatus() {
     fetchMe().then((res) => {
       if (active) setMe(res);
     });
+
+    const supabase = createClient();
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(() => {
+      fetchMe().then((res) => {
+        if (active) setMe(res);
+      });
+    });
+
     return () => {
       active = false;
+      subscription.unsubscribe();
     };
   }, []);
 
@@ -35,19 +47,20 @@ export function AuthStatus() {
   }
 
   async function signOut() {
-    await logout();
+    await supabaseSignOut();
     setMe({ authenticated: false, email: null, country: null });
     router.refresh();
   }
 
   return (
     <div className="flex items-center gap-2">
-      <span
-        className="hidden max-w-[140px] truncate text-xs text-ink-subtle sm:inline"
+      <Link
+        href="/account"
+        className="hidden max-w-[140px] truncate text-xs text-ink-subtle hover:text-ink sm:inline"
         title={me.email ?? undefined}
       >
         {me.email}
-      </span>
+      </Link>
       <button
         type="button"
         onClick={signOut}

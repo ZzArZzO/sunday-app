@@ -12,6 +12,12 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
+    # Supabase's auth.users.id (a UUID, stored as text — see supabase_jwt.py).
+    # Nullable: the seeded demo user never signs in via Supabase and stays NULL.
+    # No FK to auth.users — that's Supabase's vendor-managed schema.
+    supabase_user_id: Mapped[str | None] = mapped_column(
+        String(36), unique=True, index=True, nullable=True
+    )
     country: Mapped[str] = mapped_column(String(2), default="DE")
     timezone: Mapped[str] = mapped_column(String(64), default="Europe/Berlin")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

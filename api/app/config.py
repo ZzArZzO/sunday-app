@@ -43,15 +43,13 @@ class Settings(BaseSettings):
     # Path to the Firebase service-account key JSON (keep it out of source control).
     fcm_credentials_json: str = ""
 
-    # --- Auth ---
-    # Public URL of the API itself (magic links point here). The web app is app_base_url.
-    api_base_url: str = "http://localhost:8000"
+    # --- Auth (Supabase Auth; verified via JWKS, see services/auth/supabase_jwt.py) ---
+    # Project URL, used to derive the JWKS endpoint.
+    supabase_url: str = ""
     # When False, routes fall back to the demo user if there's no session.
     # Defaults True (secure-by-default); set AUTH_REQUIRED=false in a local .env
     # for single-user dev without signing in.
     auth_required: bool = True
-    # Set True when serving the cookie over HTTPS (production).
-    cookie_secure: bool = False
 
     demo_user_id: int = 1
 
@@ -69,10 +67,6 @@ class Settings(BaseSettings):
     # rest. Generate with: python -c "from cryptography.fernet import Fernet;
     # print(Fernet.generate_key().decode())". Empty → exchange sync disabled (503).
     connection_secret_key: str = ""
-
-    # --- Rate limiting (auth endpoints) ---
-    # Disable for tests/benchmarks that hammer the auth routes over HTTP.
-    rate_limit_enabled: bool = True
 
     # --- Error tracking (Sentry) ---
     # Empty → Sentry disabled (no-op), like the other optional integrations.

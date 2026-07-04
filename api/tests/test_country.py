@@ -25,14 +25,14 @@ def test_lists_all_supported_countries_sorted_by_name() -> None:
 
 
 def test_update_country_sets_and_normalises(db: Session) -> None:
-    user = auth_users.get_or_create_user(db, "a@b.com")
+    user = auth_users.get_or_create_user_from_supabase(db, "11111111-1111-1111-1111-111111111111", "a@b.com")
     res = update_country(UpdateCountryRequest(country="fr"), user, db)
     assert res.country == "FR"
     assert user.country == "FR"
 
 
 def test_update_country_rejects_unsupported(db: Session) -> None:
-    user = auth_users.get_or_create_user(db, "a@b.com")
+    user = auth_users.get_or_create_user_from_supabase(db, "11111111-1111-1111-1111-111111111111", "a@b.com")
     with pytest.raises(HTTPException) as exc:
         update_country(UpdateCountryRequest(country="US"), user, db)
     assert exc.value.status_code == 400
