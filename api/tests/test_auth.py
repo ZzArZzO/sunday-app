@@ -184,3 +184,35 @@ class TestGetCurrentUser:
         with pytest.raises(HTTPException) as exc:
             get_current_user(req, db, self._FakeSettings(auth_required=True))
         assert exc.value.status_code == 401
+
+
+class TestMeRoute:
+    """Exercises the /api/auth/me route handler itself, not just its
+    dependencies -- a bug here (wrong function name, wrong import) wouldn't
+    be caught by testing get_current_user or verify_access_token alone."""
+
+    class _FakeReq:
+        def __init__(self, headers: dict | None = None):
+            self.headers = headers or {}
+
+    def test_no_token_returns_unauthenticated(self, db: Session) -> None:
+        from app.routes.auth import me
+
+        result = me(self._FakeReq(), db)
+        assert result.authenticated is False
+        assert result.email is None
+
+    def test_invalid_token_returns_unauthenticated(self, db: Session, fake_jwks: None) -> None:
+        from app.routes.auth import me
+
+        req = self._FakeReq(headers={"Authorization": "Bearer garbage"})
+        result = me(req, db)
+        assert result.authenticated is False
+
+    def test_valid_token_returns_authenticated_user(self, db: Session, fake_jwks: None) -> None:
+        from app.routes.auth import me
+
+        req = self._FakeReq(headers={"Authorization": f"Bearer {_token()}"})
+        result = me(req, db)
+        assert result.authenticated is True
+        assert result.email == "a@b.com"

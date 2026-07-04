@@ -28,7 +28,7 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 @router.get("/me", response_model=MeResponse)
 def me(request: Request, db: Session = Depends(get_db)) -> MeResponse:
-    token = _bearer_token_from_request(request)
+    token = supabase_jwt.bearer_token_from_request(request)
     claims = supabase_jwt.verify_access_token(token) if token else None
     if claims is None or not claims.email:
         return MeResponse(authenticated=False)
