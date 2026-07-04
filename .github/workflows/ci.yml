@@ -47,17 +47,24 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: http://localhost:8000
 
-  deploy-api:
-    name: Deploy API (Fly.io)
-    needs: [api]
+  deploy:
+    name: Deploy (Hetzner)
+    needs: [api, web]
     if: github.ref == 'refs/heads/master' && github.event_name == 'push'
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: api
     steps:
-      - uses: actions/checkout@v4
-      - uses: superfly/flyctl-actions/setup-flyctl@master
-      - run: flyctl deploy --remote-only
-        env:
-          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+      # The box already has the repo cloned and its own .env (secrets never
+      # pass through this workflow) — this just fast-forwards it and
+      # rebuilds. See docs/DEPLOY_HETZNER.md for the one-time server setup.
+      - uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_SSH_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/sunday-app
+            git fetch origin master
+            git reset --hard origin/master
+            docker compose -f docker-compose.prod.yml up -d --build
+            docker image prune -f

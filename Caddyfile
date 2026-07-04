@@ -1,0 +1,12 @@
+# Reverse proxy + automatic HTTPS (Let's Encrypt) for both services on this
+# box. Domains come from env vars so this file doesn't need editing once the
+# real domain is chosen — set WEB_DOMAIN and API_DOMAIN in .env.
+{$WEB_DOMAIN} {
+	reverse_proxy web:3000
+	encode gzip
+}
+
+{$API_DOMAIN} {
+	reverse_proxy api:8000
+	encode gzip
+}
