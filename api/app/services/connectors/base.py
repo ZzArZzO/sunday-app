@@ -303,6 +303,61 @@ def replace_connection_lots(
     )
 
 
+def replace_csv_import(
+    db: Session,
+    portfolio: Portfolio,
+    connection: Connection,
+    detected_format: str,
+    txns: list[CanonicalTransaction],
+    *,
+    max_holdings: int | None = None,
+) -> ApplyResult:
+    """Re-importing the same (or an updated) CSV export should replace what a
+    prior import through this connection created, not double it. A CSV has no
+    natural idempotency key of its own (Trade Republic includes a
+    transaction_id we don't currently track) -- without this, a second import
+    of an unchanged file silently reapplies every buy/sell and inflates every
+    quantity, which is exactly what happened importing the same 854-row file
+    twice: every position ended up at roughly double its real size.
+
+    `_get_or_create_csv_connection` (routes/ingest.py) already gives every CSV
+    upload a persistent Connection keyed by broker label, specifically so
+    re-uploads of the same broker update that source rather than spawning
+    duplicates -- this is the same connection-scoping `replace_connection_lots`
+    uses for live sync, just without its recompute-from-remaining-lots step,
+    which would be wrong here: CSV history includes sells/splits that aren't
+    persisted as lots, so recomputing from remaining buy lots alone would
+    silently lose that history. Deleting the whole position and replaying the
+    fresh file's full history avoids that.
+
+    Deletes positions where EVERY lot came from this connection (never a
+    different broker's connection, and never a manually-entered or
+    differently-sourced lot for the same ticker -- that mixed case is left
+    untouched rather than guessed at).
+    """
+    stale = [
+        p
+        for p in portfolio.positions
+        if p.lots and all(lot.connection_id == connection.id for lot in p.lots)
+    ]
+    for pos in stale:
+        # Both sides: db.delete() alone leaves the now-stale ORM instance in
+        # portfolio.positions' already-loaded collection, which the
+        # apply_transactions call below also reads via _build_position_index.
+        portfolio.positions.remove(pos)
+        db.delete(pos)
+    db.flush()
+
+    return apply_transactions(
+        db,
+        portfolio,
+        txns,
+        source_label=detected_format,
+        connection=connection,
+        max_holdings=max_holdings,
+    )
+
+
 def _recompute_position_from_lots(db: Session, position: Position) -> None:
     """Rebuild a position's quantity + avg cost from its remaining buy lots.
 
