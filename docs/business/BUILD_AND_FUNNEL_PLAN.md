@@ -29,8 +29,8 @@ So the remaining gap to charging a customer is **finishing, not building**.
 |---|---|---|---|
 | B1 | **Stripe live round-trip** | Can't take money without it | Rails done; create real Product/Price, restricted key, webhook secret, run Checkout→webhook once with `4242…` |
 | B2 | **Production email (verified Resend domain)** | The weekly briefing email **is the product** — dry-run means nothing actually sends | Sender built; needs a verified domain |
-| B3 | **Scheduler single-instance pin + weekly idempotency** | Duplicate/again-sent briefings on cloud = trust-killer | Idempotency guard committed on `feat/weekly-idempotency-seed-fix` (not merged); pin still open |
-| B4 | **Branch reconciliation** | Features + fixes live on diverged branches | Land features → `master`, then fold in the idempotency fix |
+| B3 | **Scheduler single-instance pin + weekly idempotency** | Duplicate/again-sent briefings on cloud = trust-killer | Idempotency guard **merged to master** (`briefing_delivery.py` + migration `0011_weekly_deliveries`); pin still open |
+| B4 | **Branch reconciliation** | Features + fixes live on diverged branches | ✅ **Done** — verified all feature branches are ancestors of `master` (see `M0_M1_CHECKLIST.md`) |
 | B5 | **Legal content + DPAs** | Charging EU consumers for a finance product | Page scaffolds exist; need real reviewed copy, Anthropic EU DPA, Stripe DPA, Impressum filled (founder is **NL-based** now — docs still say PT in places) |
 | B6 | **Deploy target confirmed live** | Need a public URL to sell | CI SSH-deploys to Hetzner; confirm the box is provisioned + domains resolve |
 
@@ -38,7 +38,7 @@ Everything else in `docs/ROADMAP.md` Phase 3–5 (passkeys, 5-country tax engine
 
 ### Sunday build sequence
 
-- **M0 — Reconcile branches (B4).** Get billing + cost-ledger + mobile + the idempotency fix cleanly onto `master`. One deliberate merge pass. Nothing else lands until this is clean.
+- **M0 — Reconcile branches (B4).** ✅ Already done — everything (billing, cost-ledger, mobile, idempotency fix) is on `master`. Remaining M0 work is baseline verification + killing stale docs; see `M0_M1_CHECKLIST.md`.
 - **M1 — Money works (B1).** Live Stripe: one Product, `pro_monthly` (€9) + `pro_annual` (€89) Prices tagged with `lookup_key`, restricted key, webhook secret, one real Checkout→webhook→access-granted round-trip. Ship **Free + Pro only** (skip the Premium anchor for v1 — add it once there's demand for unlimited portfolios/AI).
 - **M2 — The product actually delivers (B2 + B3).** Verified Resend domain so real briefings send; scheduler pinned to one always-on instance with the idempotency guard live. Send yourself a real Sunday briefing end-to-end on a schedule.
 - **M3 — Legal + deploy to sell (B5 + B6).** Privacy/ToS/Impressum reviewed and filled (NL Impressum, not PT); Anthropic + Stripe DPAs executed; public URL live and stable; EU dark-pattern compliance on the cancel flow (Stripe Portal already gives one-click cancel — Directive 2023/2673 is enforceable from 19 Jun 2026).

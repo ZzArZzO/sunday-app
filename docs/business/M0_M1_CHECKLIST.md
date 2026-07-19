@@ -1,6 +1,6 @@
 # Sunday — M0–M1 Execution Checklist
 
-*Drafted: 2026-07-18 · Companion to `build-and-funnel-plan.md`. Grounded in the actual state of `sunday-app` master (`dc80b11`), not the stale `docs/STATUS.md`.*
+*Drafted: 2026-07-18 · Companion to `BUILD_AND_FUNNEL_PLAN.md`. Grounded in the actual state of `sunday-app` master (`dc80b11`), not the stale `docs/STATUS.md`.*
 
 ## Key finding — M0 is essentially already done
 
